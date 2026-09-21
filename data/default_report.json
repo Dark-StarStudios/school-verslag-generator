@@ -1,0 +1,87 @@
+{
+  "schema": "school-verslag/1.0",
+  "student": {
+    "name": "",
+    "student_number": "",
+    "class_name": "WEB3A",
+    "company": "",
+    "practice_supervisor": "",
+    "bpv_supervisor": ""
+  },
+  "project": {
+    "title": "",
+    "subtitle": "",
+    "version": "0.1",
+    "report_date": "",
+    "exam_name": "",
+    "exam_number": "EP1",
+    "start_date": "",
+    "end_date": "",
+    "description": "",
+    "introduction": "",
+    "products": []
+  },
+  "activities": [],
+  "resources": {"materials": [], "people": [], "means": [], "knowledge": []},
+  "scope": {"included": [], "excluded": [], "provided": []},
+  "planning": [
+    {"phase": "Analyse en plan", "period": "", "tasks": []},
+    {"phase": "Ontwerp en voorbereiding", "period": "", "tasks": []},
+    {"phase": "Realisatie", "period": "", "tasks": []},
+    {"phase": "Testen en feedback", "period": "", "tasks": []},
+    {"phase": "Oplevering en afronding", "period": "", "tasks": []}
+  ],
+  "work_processes": [
+    {
+      "id": "104", "code": "B1-K1-W1", "title": "Plant werkzaamheden en bewaakt de voortgang", "selected": true,
+      "competencies": ["Samenwerken en overleggen", "Analyseren", "Plannen en organiseren", "Onderzoeken"],
+      "indicators": ["Stemt doelen en planning af en vraagt door totdat deze duidelijk zijn.", "Trekt logische conclusies over werkzaamheden en risico's.", "Stelt realistische doelen, prioriteiten en een realistisch tijdspad op.", "Bewaakt de gestelde doelen en planning."],
+      "accountability": "", "evidence": []
+    },
+    {
+      "id": "105", "code": "B1-K1-W2", "title": "Ontwerpt software", "selected": true,
+      "competencies": ["Vakdeskundigheid toepassen", "Op de behoeften en verwachtingen van de klant richten", "Instructies en procedures opvolgen"],
+      "indicators": ["Beargumenteert de gemaakte keuzes in het ontwerp.", "Controleert of het ontwerp voldoet aan eisen en wensen en stelt zo nodig aanpassingen voor.", "Volgt protocollen en regelgeving rond privacy, ethiek en veiligheid."],
+      "accountability": "", "evidence": []
+    },
+    {
+      "id": "106", "code": "B1-K1-W3", "title": "Realiseert onderdelen van software", "selected": true,
+      "competencies": ["Samenwerken en overleggen", "Vakdeskundigheid toepassen", "Kwaliteit leveren", "Instructies en procedures opvolgen", "Met druk en tegenslag omgaan"],
+      "indicators": ["Kiest passende materialen en softwaretools en gebruikt deze effectief.", "Hanteert de afgesproken codeconventies.", "Realiseert nette en leesbare software.", "Realiseert de software volgens opdracht en ontwerp.", "Blijft effectief en productief onder tijdsdruk.", "Stemt bij integratie van assets de taakverdeling af."],
+      "accountability": "", "evidence": []
+    },
+    {
+      "id": "107", "code": "B1-K1-W4", "title": "Test software", "selected": true,
+      "competencies": ["Formuleren en rapporteren", "Vakdeskundigheid toepassen", "Analyseren", "Instructies en procedures opvolgen"],
+      "indicators": ["Voert testactiviteiten correct en adequaat uit.", "Interpreteert testresultaten en trekt logische conclusies.", "Legt testresultaten en conclusies nauwkeurig en duidelijk vast."],
+      "accountability": "", "evidence": []
+    },
+    {
+      "id": "108", "code": "B1-K1-W5", "title": "Doet verbetervoorstellen voor de software", "selected": true,
+      "competencies": ["Samenwerken en overleggen", "Analyseren", "Plannen en organiseren", "Vakdeskundigheid toepassen"],
+      "indicators": ["Analyseert systematisch beschikbare informatiebronnen.", "Vertaalt wensen, reacties en testresultaten naar realiseerbare verbeteringen.", "Stemt werkzaamheden en een haalbare planning af."],
+      "accountability": "", "evidence": []
+    },
+    {
+      "id": "109", "code": "B1-K2-W1", "title": "Voert overleg", "selected": true,
+      "competencies": ["Samenwerken en overleggen", "Formuleren en rapporteren", "Instructies en procedures opvolgen", "Leren"],
+      "indicators": ["Brengt noodzakelijke en relevante onderwerpen in.", "Meldt uitdagingen en vraagt waar nodig om advies.", "Formuleert afspraken eenduidig.", "Houdt zich aan de afgesproken overlegwerkwijze."],
+      "accountability": "", "evidence": []
+    },
+    {
+      "id": "110", "code": "B1-K2-W2", "title": "Presenteert het opgeleverde werk", "selected": true,
+      "competencies": ["Presenteren", "Vakdeskundigheid toepassen"],
+      "indicators": ["Legt functionaliteiten duidelijk uit en beantwoordt vragen adequaat.", "Houdt een goed opgebouwd en onderbouwd verhaal.", "Stemt communicatie en presentatiemiddelen af op de doelgroep."],
+      "accountability": "", "evidence": []
+    },
+    {
+      "id": "111", "code": "B1-K2-W3", "title": "Reflecteert op het werk", "selected": true,
+      "competencies": ["Samenwerken en overleggen", "Leren"],
+      "indicators": ["Stelt zich open voor feedback en vraagt naar meningen en ideeen.", "Geeft positieve en constructieve feedback.", "Is kritisch op het eigen werk."],
+      "accountability": "", "evidence": []
+    }
+  ],
+  "evaluation": {"professional": "", "personal": "", "next_project": ""},
+  "declaration_accepted": false
+}
+

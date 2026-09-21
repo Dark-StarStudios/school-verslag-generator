@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Verslagmaker</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="header-inner">
+      <a class="brand" href="#top" aria-label="Verslagmaker start">
+        <span class="brand-mark">N</span>
+        <span class="brand-copy">
+          <strong>Verslagmaker</strong>
+          <small>Het word door Nikita Vlasov(40191784) gemaakt!</small>
+        </span>
+      </a>
+      <div class="header-status">
+        <span id="selectedCount">8 werkprocessen geselecteerd</span>
+        <span class="version-chip">v1.0</span>
+        <button class="button ghost preview-toggle" id="previewToggle" type="button">Voorbeeld</button>
+        <span class="save-state" id="saveState">Lokaal opgeslagen</span>
+      </div>
+    </div>
+  </header>
+
+  <main id="top" class="app-shell">
+    <div class="required-note">
+      Alle velden met een <strong>* zijn verplicht.</strong> Controleer alle onderdelen voordat je het verslag exporteert.
+    </div>
+    <div class="privacy-note">
+      <strong>Lokale opslag</strong> — Je concept blijft in deze browser en wordt niet naar een externe server gestuurd. Download het JSON-bestand als veilige reservekopie.
+    </div>
+
+    <aside class="sidebar" aria-label="Verslagonderdelen">
+      <div class="navigation-head">
+        <div>
+          <span class="eyebrow">VERSLAG ONDERDELEN</span>
+          <p>Werk stap voor stap. Je voortgang wordt automatisch lokaal bewaard.</p>
+        </div>
+        <div class="progress-summary"><strong id="progressLabel">0%</strong><span id="progressHint">Begin met de basisgegevens.</span></div>
+      </div>
+      <nav id="stepNav"></nav>
+      <div class="progress-card">
+        <div class="progress-track"><span id="progressBar"></span></div>
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <div class="workspace-head">
+        <div>
+          <span class="eyebrow" id="stepEyebrow">STAP 1 VAN 8</span>
+          <h2 id="stepTitle">Voorblad en basisgegevens</h2>
+          <p id="stepIntro">Leg vast wie het verslag maakt en over welk examenproject het gaat.</p>
+        </div>
+      </div>
+      <div class="notice" id="notice" role="status" hidden></div>
+      <form id="reportForm" novalidate>
+        <div id="stepContent"></div>
+      </form>
+    </section>
+
+    <aside class="preview" id="previewPanel" aria-label="Live voorbeeld">
+      <div class="preview-head">
+        <div><span class="eyebrow">LIVE VOORBEELD</span><strong id="previewTitle">Examenverslag</strong></div>
+        <span class="page-pill">A4</span>
+      </div>
+      <article class="paper" id="previewPaper"></article>
+    </aside>
+  </main>
+
+  <div class="bottom-bar">
+    <div class="bottom-actions">
+      <button class="button ghost" id="previousStep" type="button">Vorige</button>
+      <button class="button ghost" id="loadJson" type="button">Concept laden</button>
+      <button class="button ghost" id="saveJson" type="button">Concept opslaan</button>
+      <button class="button coral" id="nextStep" type="button">Volgende stap</button>
+      <input id="fileInput" type="file" accept="application/json,.json" hidden>
+    </div>
+  </div>
+
+  <script>window.DEFAULT_REPORT = {{ default_report|tojson }};</script>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>
