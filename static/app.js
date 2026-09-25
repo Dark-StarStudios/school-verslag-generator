@@ -2,6 +2,10 @@
   "use strict";
   const clone = value => JSON.parse(JSON.stringify(value));
   const STORAGE_KEY = "school-verslag/1.0/autosave";
+  const DECLARATION = `Hierbij verklaar ik dat:
+Het door mij gemaakte werk zelf geschreven is en dat ik geen teksten heb overgenomen uit andere stageverslagen, scripties, overige geschriften en literatuur zonder de bron te hebben vermeld.
+De inhoud van dit verslag komt, voor wat betreft de feiten en de verrichte werkzaamheden, geheel overeen met de werkelijkheid.
+De beschreven door mij uitgevoerde werkzaamheden zijn daadwerkelijk door mij verricht.`;
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const escapeHtml = value => String(value ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -11,6 +15,14 @@
     parts.slice(0, -1).forEach(key => obj = obj[key]); obj[parts.at(-1)] = next;
   };
   const list = path => Array.isArray(value(path)) ? value(path) : [];
+  const mergeDefaults = (defaults, saved) => {
+    if (!defaults || typeof defaults !== "object" || Array.isArray(defaults) || !saved || typeof saved !== "object" || Array.isArray(saved)) return clone(saved);
+    const merged = clone(defaults);
+    Object.entries(saved).forEach(([key, savedValue]) => {
+      merged[key] = key in merged ? mergeDefaults(merged[key], savedValue) : clone(savedValue);
+    });
+    return merged;
+  };
 
   const steps = [
     ["Voorblad", "Voorblad en basisgegevens", "Leg vast wie het verslag maakt en over welk examenproject het gaat."],
@@ -25,7 +37,10 @@
   const state = { report: loadAutosave(), step: 0 };
 
   function loadAutosave() {
-    try { return {...clone(window.DEFAULT_REPORT), ...JSON.parse(localStorage.getItem(STORAGE_KEY))}; }
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      return saved ? mergeDefaults(window.DEFAULT_REPORT, saved) : clone(window.DEFAULT_REPORT);
+    }
     catch { return clone(window.DEFAULT_REPORT); }
   }
   function saveAutosave() {
@@ -64,10 +79,10 @@
   }
   function renderCover() {
     return `<div class="field-grid">
-      ${field("Titel", "project.title", {required:true, placeholder:"Bijvoorbeeld Antonis Verhuur website"})}
-      ${field("Ondertitel", "project.subtitle", {placeholder:"Bijvoorbeeld Technisch examenverslag"})}
-      ${field("Naam student", "student.name", {required:true})}${field("OV-nummer", "student.student_number")}
-      ${field("Klas", "student.class_name", {required:true})}${field("Stagebedrijf of opdrachtgever", "student.company", {required:true})}
+      ${field("Titel", "project.title", {required:true, placeholder:"Bijvoorbeeld een website"})}
+      ${field("Ondertitel", "project.subtitle", {placeholder:"Bijvoorbeeld examenverslag"})}
+      ${field("Naam student", "student.name", {required:true, placeholder:"Bijvoorbeeld Nikita Vlasov"})}${field("OV-nummer", "student.student_number")}
+      ${field("Klas", "student.class_name", {required:true, placeholder:"Bijvoorbeeld WEB3A"})}${field("Stagebedrijf of opdrachtgever", "student.company", {required:true})}
       ${field("Praktijkopleider", "student.practice_supervisor")}${field("BPV-begeleider", "student.bpv_supervisor")}
       ${field("Versie", "project.version", {required:true})}${field("Verslagdatum", "project.report_date", {type:"date", required:true})}
       ${field("Examennaam", "project.exam_name")}${field("Examennummer", "project.exam_number", {placeholder:"EP1"})}
@@ -91,29 +106,55 @@
     return `<div class="repeat-head"><div><h3>Projectfasen</h3><span class="hint">Perioden mogen datums of weken zijn.</span></div><button class="add-button" id="addPhase" type="button">+ fase toevoegen</button></div>` + state.report.planning.map((phase, i) => `<article class="phase-card"><div class="phase-grid">${field(`Fase ${i+1}`, `planning.${i}.phase`, {required:true})}${field("Periode", `planning.${i}.period`, {placeholder:"dd-mm-jjjj t/m dd-mm-jjjj"})}</div><div style="margin-top:14px">${repeatSection("Taken", `planning.${i}.tasks`, "Concrete taak of mijlpaal")}</div><button class="add-button" data-remove-phase="${i}" type="button">Fase verwijderen</button></article>`).join("");
   }
   function renderWorkProcesses() {
-    return `<p class="hint">De criteria komen uit Web development C2024, Crebo 25604ONA1. Selecteer alleen processen waarop je wordt beoordeeld.</p>` + state.report.work_processes.map((wp, i) => `<article class="wp-card"><div class="wp-top"><div><span class="wp-code">${escapeHtml(wp.code)}</span><h3>${escapeHtml(wp.title)}</h3><span class="hint">${escapeHtml((wp.competencies || []).join(", "))}</span></div><label class="switch" aria-label="${escapeHtml(wp.code)} selecteren"><input type="checkbox" data-wp-select="${i}" ${wp.selected ? "checked" : ""}><span></span></label></div>${wp.selected ? `<details><summary>Beoordelingscriteria bekijken</summary><ul>${(wp.indicators || []).map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul></details><div class="field"><label>Mijn verantwoording *</label><textarea data-path="work_processes.${i}.accountability" rows="7" placeholder="Beschrijf situatie, jouw eigen handelingen, gemaakte keuzes, resultaat en wat je daarvan hebt geleerd.">${escapeHtml(wp.accountability || "")}</textarea><small>Schrijf in de ik-vorm en verwijs naar controleerbaar bewijs.</small></div><div style="margin-top:14px">${repeatSection("Bewijs", `work_processes.${i}.evidence`, "Bijvoorbeeld GitHub commit, screenshot, testverslag of feedback")}</div>` : ""}</article>`).join("");
+    return `<p class="hint">De criteria komen uit Web development C2024, Crebo 25604ONA1. Selecteer alleen processen waarop je wordt beoordeeld.</p>` + state.report.work_processes.map((wp, i) => `<article class="wp-card"><div class="wp-top"><div><span class="wp-code">${escapeHtml(wp.code)}</span><h3>${escapeHtml(wp.title)}</h3><span class="hint">${escapeHtml((wp.competencies || []).join(", "))}</span></div><label class="switch" aria-label="${escapeHtml(wp.code)} selecteren"><input type="checkbox" data-wp-select="${i}" ${wp.selected ? "checked" : ""}><span></span></label></div>${wp.selected ? `<details><summary>Beoordelingscriteria bekijken</summary><ul>${(wp.indicators || []).map(x => `<li>${escapeHtml(x)}</li>`).join("")}</ul></details><div class="field"><label>Mijn verantwoording *</label><textarea data-path="work_processes.${i}.accountability" rows="7" placeholder="Beschrijf situatie, jouw eigen handelingen, gemaakte keuzes, resultaat en wat je daarvan hebt geleerd.">${escapeHtml(wp.accountability || "")}</textarea><small>Schrijf in de ik-vorm en verwijs naar controleerbaar bewijs.</small></div><div style="margin-top:14px">${repeatSection("Bewijs", `work_processes.${i}.evidence`, "Bijvoorbeeld GitHub commit, screenshot, testverslag of feedback")}</div>${evidenceImageSection(wp, i)}` : ""}</article>`).join("");
+  }
+  function evidenceImageSection(wp, index) {
+    const images = wp.evidence_images || [];
+    return `<section class="evidence-images"><div class="repeat-head"><div><h3>Screenshots</h3><span class="hint">PNG, JPG of WebP; afbeeldingen komen ook in PDF, DOCX en ODT.</span></div><label class="add-button file-button">+ screenshots<input type="file" accept="image/png,image/jpeg,image/webp" multiple data-evidence-images="${index}"></label></div><div class="evidence-grid">${images.map((image, imageIndex) => `<figure><img src="${escapeHtml(image.data)}" alt="${escapeHtml(image.name || "Bewijs")}"><figcaption>${escapeHtml(image.name || `Screenshot ${imageIndex + 1}`)}</figcaption><button type="button" class="icon-button" data-remove-evidence-image="${index}" data-image-index="${imageIndex}" aria-label="Screenshot verwijderen">×</button></figure>`).join("") || `<span class="hint">Nog geen screenshots toegevoegd.</span>`}</div></section>`;
   }
   function renderEvaluation() {
     return `<div class="field-grid">${field("Vakinhoudelijke evaluatie", "evaluation.professional", {type:"textarea", full:true, required:true, placeholder:"Wat wilde je leren, wat heb je geleerd, wat ging goed en wat kon beter?"})}${field("Persoonlijke evaluatie", "evaluation.personal", {type:"textarea", full:true, required:true, placeholder:"Wat heb je over samenwerken, plannen, communiceren en jezelf geleerd?"})}${field("Volgend project", "evaluation.next_project", {type:"textarea", full:true, required:true, placeholder:"Wat ga je de volgende keer concreet anders doen of verder leren?"})}</div>`;
   }
   function renderDeclaration() {
-    const declaration = `Hierbij verklaar ik dat:\nHet door mij gemaakte werk zelf geschreven is en dat ik geen teksten heb overgenomen uit andere stageverslagen, scripties, overige geschriften en literatuur zonder de bron te hebben vermeld.\nDe inhoud van dit verslag komt, voor wat betreft de feiten en de verrichte werkzaamheden, geheel overeen met de werkelijkheid.\nDe beschreven door mij uitgevoerde werkzaamheden zijn daadwerkelijk door mij verricht.`;
-    return `<div class="declaration">${escapeHtml(declaration)}</div><label class="check-card" style="margin-top:18px"><input type="checkbox" id="declarationAccepted" ${state.report.declaration_accepted ? "checked" : ""}><span><strong>Ik neem deze verklaring op in mijn verslag</strong><p>Controleer vóór inleveren of alle beschreven werkzaamheden echt door jou zijn uitgevoerd.</p></span></label>`;
+    return `<div class="declaration">${escapeHtml(DECLARATION)}</div><label class="check-card" style="margin-top:18px"><input type="checkbox" id="declarationAccepted" ${state.report.declaration_accepted ? "checked" : ""}><span><strong>Ik neem deze verklaring op in mijn verslag</strong><p>Controleer vóór inleveren of alle beschreven werkzaamheden echt door jou zijn uitgevoerd.</p></span></label>`;
   }
   function renderChecks() {
     const checks = qualityChecks(); const errors = checks.filter(x => !x.ok);
     return `<div>${checks.map(x => `<article class="check-card ${x.ok ? "ok" : "warn"}"><span>${x.ok ? "✓" : "!"}</span><div><strong>${escapeHtml(x.title)}</strong><p>${escapeHtml(x.message)}</p></div></article>`).join("")}</div><div class="export-grid"><button type="button" class="export-button" data-export="pdf">PDF<span>Direct inleverbaar</span></button><button type="button" class="export-button" data-export="docx">DOCX<span>Verder bewerken in Word</span></button><button type="button" class="export-button" data-export="odt">ODT<span>LibreOffice en OpenDocument</span></button></div>${errors.length ? `<p class="hint">Exporteren kan al, maar los de waarschuwingen op voor een sterker verslag.</p>` : `<p class="hint">Alle basiscontroles zijn geslaagd. Lees het verslag nog één keer zelf na.</p>`}`;
   }
   function bindDynamic() {
-    $$('[data-path]').forEach(el => el.addEventListener("input", () => { setValue(el.dataset.path, el.value); scheduleSave(); renderPreview(); updateProgress(); }));
-    $$('[data-list-path]').forEach(el => el.addEventListener("input", () => { const arr = list(el.dataset.listPath); arr[Number(el.dataset.index)] = el.value; scheduleSave(); renderPreview(); }));
+    $$('[data-path]').forEach(el => {
+      const sync = () => { setValue(el.dataset.path, el.value); scheduleSave(); renderPreview(); updateProgress(); };
+      el.addEventListener("input", sync);
+      // Date pickers and some autofill implementations only emit change.
+      el.addEventListener("change", sync);
+    });
+    $$('[data-list-path]').forEach(el => {
+      const sync = () => { const arr = list(el.dataset.listPath); arr[Number(el.dataset.index)] = el.value; scheduleSave(); renderPreview(); updateProgress(); };
+      el.addEventListener("input", sync);
+      el.addEventListener("change", sync);
+    });
     $$('[data-add-list]').forEach(el => el.addEventListener("click", () => { list(el.dataset.addList).push(""); scheduleSave(); renderStep(); }));
     $$('[data-remove-list]').forEach(el => el.addEventListener("click", () => { list(el.dataset.removeList).splice(Number(el.dataset.index), 1); scheduleSave(); renderStep(); }));
     $$('[data-step]').forEach(el => el.addEventListener("click", () => { state.step = Number(el.dataset.step); renderStep(); }));
     $$('[data-wp-select]').forEach(el => el.addEventListener("change", () => { state.report.work_processes[Number(el.dataset.wpSelect)].selected = el.checked; scheduleSave(); renderStep(); }));
     $$('[data-remove-phase]').forEach(el => el.addEventListener("click", () => { state.report.planning.splice(Number(el.dataset.removePhase), 1); scheduleSave(); renderStep(); }));
     $("#addPhase")?.addEventListener("click", () => { state.report.planning.push({phase:"", period:"", tasks:[]}); scheduleSave(); renderStep(); });
-    $("#declarationAccepted")?.addEventListener("change", e => { state.report.declaration_accepted = e.target.checked; scheduleSave(); updateProgress(); });
+    $("#declarationAccepted")?.addEventListener("change", e => { state.report.declaration_accepted = e.target.checked; scheduleSave(); renderPreview(); updateProgress(); });
+    $$('[data-evidence-images]').forEach(el => el.addEventListener("change", async () => {
+      const wp = state.report.work_processes[Number(el.dataset.evidenceImages)];
+      wp.evidence_images ||= [];
+      for (const file of [...el.files]) {
+        if (!/^image\/(png|jpeg|webp)$/.test(file.type)) continue;
+        wp.evidence_images.push({name:file.name, type:file.type, data:await fileToDataUrl(file)});
+      }
+      scheduleSave(); renderStep();
+    }));
+    $$('[data-remove-evidence-image]').forEach(el => el.addEventListener("click", () => {
+      const wp = state.report.work_processes[Number(el.dataset.removeEvidenceImage)];
+      (wp.evidence_images ||= []).splice(Number(el.dataset.imageIndex), 1);
+      scheduleSave(); renderStep();
+    }));
     $$('[data-export]').forEach(el => el.addEventListener("click", () => exportReport(el.dataset.export, el)));
   }
   function stepComplete(i) {
@@ -122,7 +163,7 @@
     if (i === 1) return r.activities.length > 0 && Object.values(r.resources).some(x => x.length);
     if (i === 2) return r.scope.included.length && r.scope.excluded.length && r.scope.provided.length;
     if (i === 3) return r.planning.length && r.planning.every(x => x.phase && x.tasks.length);
-    if (i === 4) { const selected = r.work_processes.filter(x => x.selected); return selected.length > 0 && selected.every(x => (x.accountability || "").trim().length >= 80 && x.evidence.length); }
+    if (i === 4) { const selected = r.work_processes.filter(x => x.selected); return selected.length > 0 && selected.every(x => (x.accountability || "").trim().length >= 80 && ((x.evidence || []).length || (x.evidence_images || []).length)); }
     if (i === 5) return Object.values(r.evaluation).every(x => (x || "").trim().length >= 80);
     if (i === 6) return r.declaration_accepted;
     return qualityChecks().every(x => x.ok);
@@ -151,11 +192,58 @@
   function renderPreview() {
     const r = state.report, s = r.student, p = r.project;
     $("#previewTitle").textContent = p.title || "Examenverslag";
-    const meta = [["Naam",s.name],["Klas",s.class_name],["Versie",p.version],["Datum",p.report_date],["Stagebedrijf",s.company]].filter(x=>x[1]);
+    const meta = [
+      ["Naam", s.name], ["OV-nummer", s.student_number], ["Klas", s.class_name],
+      ["Versie", p.version], ["Verslagdatum", displayDate(p.report_date)],
+      ["Examennaam", p.exam_name], ["Examennummer", p.exam_number],
+      ["Startdatum examen", displayDate(p.start_date)], ["Einddatum examen", displayDate(p.end_date)],
+      ["Stagebedrijf", s.company], ["Praktijkopleider", s.practice_supervisor],
+      ["BPV-begeleider", s.bpv_supervisor]
+    ].filter(([, content]) => content);
     const selected = r.work_processes.filter(x=>x.selected);
-    $("#previewPaper").innerHTML = `<h1>${escapeHtml(p.title || "Titel van het project")}</h1><p>${escapeHtml(p.subtitle || p.exam_name || "Examenverslag")}</p><div class="cover-meta">${meta.map(([a,b])=>`<div><strong>${escapeHtml(a)}</strong><span>${escapeHtml(b)}</span></div>`).join("") || `<p class="placeholder">Vul de basisgegevens in.</p>`}</div><h2>Inleiding</h2><p>${escapeHtml(p.introduction || "De inleiding verschijnt hier.")}</p><h2>Examenactiviteiten</h2>${previewList(r.activities)}<h2>Planning</h2>${r.planning.filter(x=>x.phase).map(x=>`<h3>${escapeHtml(x.phase)}</h3>${previewList(x.tasks)}`).join("")}<h2>Verantwoording</h2>${selected.slice(0,3).map(x=>`<h3>${escapeHtml(x.code)} ${escapeHtml(x.title)}</h3><p>${escapeHtml(x.accountability || "Nog te beschrijven.")}</p>`).join("")}<h2>Evaluatie</h2><p>${escapeHtml(r.evaluation.professional || "Nog te schrijven.")}</p>`;
+    const planning = (r.planning || []).filter(x => x.phase || x.period || x.tasks?.some(Boolean));
+    $("#previewPaper").innerHTML = `
+      <h1>${escapeHtml(p.title || "Titel van het project")}</h1>
+      <p>${escapeHtml(p.subtitle || p.exam_name || "Examenverslag")}</p>
+      <div class="cover-meta">${meta.map(([label, content])=>`<div><strong>${escapeHtml(label)}</strong><span>${escapeHtml(content)}</span></div>`).join("") || `<p class="placeholder">Vul de basisgegevens in.</p>`}</div>
+      <h2>Inleiding</h2>${previewText(p.introduction || p.description, "De inleiding verschijnt hier.")}
+      <h2>Projectgegevens</h2>
+      <h3>Op te leveren producten</h3>${previewList(p.products)}
+      <h2>Examenactiviteiten</h2>${previewList(r.activities)}
+      <h3>Materialen en software</h3>${previewList(r.resources.materials)}
+      <h3>Mensen</h3>${previewList(r.resources.people)}
+      <h3>Middelen</h3>${previewList(r.resources.means)}
+      <h3>Kennis</h3>${previewList(r.resources.knowledge)}
+      <h2>Grenzen en randvoorwaarden</h2>
+      <h3>Wat hoort wel bij het examen?</h3>${previewList(r.scope.included)}
+      <h3>Wat hoort niet bij het examen?</h3>${previewList(r.scope.excluded)}
+      <h3>Wat stelt de opdrachtgever beschikbaar?</h3>${previewList(r.scope.provided)}
+      <h2>Planning</h2>${planning.length ? planning.map(x=>`<h3>${escapeHtml(x.phase || "Projectfase")}${x.period ? ` — ${escapeHtml(x.period)}` : ""}</h3>${previewList(x.tasks)}`).join("") : `<p class="placeholder">Nog geen projectfasen ingevuld.</p>`}
+      <h2>Verantwoording</h2>${selected.length ? selected.map(x=>`<h3>${escapeHtml(x.code)} ${escapeHtml(x.title)}</h3>${x.competencies?.length ? `<p><strong>Competenties:</strong> ${escapeHtml(x.competencies.join(", "))}</p>` : ""}${previewText(x.accountability, "Nog te beschrijven.")}<h3>Bewijs</h3>${previewList(x.evidence)}${previewImages(x.evidence_images)}`).join("") : `<p class="placeholder">Nog geen werkprocessen geselecteerd.</p>`}
+      <h2>Evaluatie</h2>
+      <h3>Vakinhoudelijke evaluatie</h3>${previewText(r.evaluation.professional, "Nog te schrijven.")}
+      <h3>Persoonlijke evaluatie</h3>${previewText(r.evaluation.personal, "Nog te schrijven.")}
+      <h3>Volgend project</h3>${previewText(r.evaluation.next_project, "Nog te schrijven.")}
+      <h2>Verklaring</h2>${r.declaration_accepted ? previewText(DECLARATION) : `<p class="placeholder">Bevestig de verklaring om deze op te nemen.</p>`}`;
   }
-  function previewList(items) { return items?.length ? `<ul>${items.filter(Boolean).map(x=>`<li>${escapeHtml(x)}</li>`).join("")}</ul>` : `<p class="placeholder">Nog niets toegevoegd.</p>`; }
+  function displayDate(date) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date || "");
+    return match ? `${match[3]}-${match[2]}-${match[1]}` : (date || "");
+  }
+  function previewText(text, fallback="") {
+    const content = String(text || fallback || "");
+    return `<p${text ? "" : ` class="placeholder"`}>${escapeHtml(content).replace(/\n/g, "<br>")}</p>`;
+  }
+  function previewList(items) {
+    const values = (items || []).filter(item => String(item || "").trim());
+    return values.length ? `<ul>${values.map(x=>`<li>${escapeHtml(x)}</li>`).join("")}</ul>` : `<p class="placeholder">Nog niets toegevoegd.</p>`;
+  }
+  function previewImages(images) {
+    return (images || []).map(image => `<figure class="preview-evidence"><img src="${escapeHtml(image.data)}" alt="${escapeHtml(image.name || "Bewijs")}"><figcaption>${escapeHtml(image.name || "Screenshot")}</figcaption></figure>`).join("");
+  }
+  function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(reader.error); reader.readAsDataURL(file); });
+  }
   function showNotice(text, error=false) { const el=$("#notice"); el.hidden=false; el.textContent=text; el.style.background=error?"#fff0f0":"#eefaf5"; el.style.color=error?"#8b2424":"#0d6849"; clearTimeout(el._timer); el._timer=setTimeout(()=>el.hidden=true,5000); }
   function saveJson() {
     const blob = new Blob([JSON.stringify(state.report, null, 2)], {type:"application/json"});

@@ -5,6 +5,8 @@ import json
 import os
 import re
 import zipfile
+import base64
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -26,6 +28,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import (
     BaseDocTemplate,
     Frame,
+    Image as ReportLabImage,
     PageBreak,
     PageTemplate,
     Paragraph,
@@ -38,7 +41,7 @@ from reportlab.platypus.tableofcontents import TableOfContents
 
 BASE_DIR = Path(__file__).resolve().parent
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 6 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
 DECLARATION = (
     "Hierbij verklaar ik dat:\n"
@@ -79,7 +82,8 @@ def normalize_report(raw):
     if not isinstance(raw, dict):
         raise ValueError("Het JSON-bestand moet een object bevatten.")
     if raw.get("schema") == "school-verslag/1.0":
-        return raw
+        # Older concepts may not contain fields added in a later form version.
+        return merge_report(empty_report(), raw)
 
     # matrijzen.ictmbo.nl concept compatibility
     if "werkprocessen" in raw and any(k in raw for k in ("opleiding_id", "kd_id", "ov")):
@@ -114,6 +118,7 @@ def normalize_report(raw):
                 "indicators": wp.get("pi") or [],
                 "accountability": clean(wp.get("desc")),
                 "evidence": [],
+                "evidence_images": [],
             })
         known = {x["code"] for x in selected}
         report["work_processes"] = selected + [
@@ -123,6 +128,21 @@ def normalize_report(raw):
         ]
         return report
     raise ValueError("Onbekend JSON-schema.")
+
+
+def merge_report(defaults, saved):
+    """Recursively add missing defaults without overwriting saved values."""
+    if not isinstance(defaults, dict) or not isinstance(saved, dict):
+        return deepcopy(saved)
+    merged = deepcopy(defaults)
+    for key, saved_value in saved.items():
+        default_value = merged.get(key)
+        merged[key] = (
+            merge_report(default_value, saved_value)
+            if isinstance(default_value, dict) and isinstance(saved_value, dict)
+            else deepcopy(saved_value)
+        )
+    return merged
 
 
 def split_competencies(value):
@@ -144,6 +164,32 @@ def selected_work_processes(report):
     return [wp for wp in report.get("work_processes", []) if wp.get("selected")]
 
 
+def evidence_images(items):
+    """Decode safe image data URLs stored in a local concept."""
+    decoded = []
+    for index, item in enumerate(items or []):
+        if not isinstance(item, dict):
+            continue
+        data_url = clean(item.get("data"))
+        match = re.fullmatch(r"data:(image/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=\s]+)", data_url)
+        if not match:
+            continue
+        try:
+            blob = base64.b64decode(match.group(2), validate=True)
+        except (ValueError, TypeError):
+            continue
+        if not blob or len(blob) > 3 * 1024 * 1024:
+            continue
+        extension = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}[match.group(1)]
+        source_name = clean(item.get("name") or f"bewijs-{index + 1}")
+        decoded.append({
+            "name": safe_filename(Path(source_name).stem) + "." + extension,
+            "mime": match.group(1),
+            "bytes": blob,
+        })
+    return decoded
+
+
 def report_sections(report):
     student = report.get("student", {})
     project = report.get("project", {})
@@ -155,6 +201,21 @@ def report_sections(report):
 
     sections = []
     sections.append(("Inleiding", [project.get("introduction") or project.get("description", "")]))
+    project_blocks = []
+    for label, key, formatter in (
+        ("Examennaam", "exam_name", clean),
+        ("Examennummer", "exam_number", clean),
+        ("Startdatum examen", "start_date", display_date),
+        ("Einddatum examen", "end_date", display_date),
+    ):
+        value = formatter(project.get(key))
+        if value:
+            project_blocks.append((label, value))
+    products = text_list(project.get("products"))
+    if products:
+        project_blocks.append(("Op te leveren producten", products))
+    if project_blocks:
+        sections.append(("Projectgegevens", project_blocks))
     exam_blocks = []
     if activities:
         exam_blocks.append(("Wat moest ik doen om het resultaat te behalen", activities))
@@ -188,6 +249,7 @@ def report_sections(report):
             "competencies": wp.get("competencies", []),
             "indicators": wp.get("indicators", []),
             "evidence": evidence,
+            "evidence_images": evidence_images(wp.get("evidence_images")),
         }))
     sections.append(("Verantwoording", accountability))
     sections.append(("Evaluatie", [
@@ -299,8 +361,12 @@ def build_pdf(report):
     subtitle = project.get("subtitle") or project.get("exam_name") or "Examenverslag"
     story += [p(subtitle, styles["H2x"]), Spacer(1, 10 * mm)]
     meta = [
-        ["Naam", student.get("name", "")], ["Klas", student.get("class_name", "")],
-        ["Versie", project.get("version", "1.0")], ["Datum", display_date(project.get("report_date", ""))],
+        ["Naam", student.get("name", "")], ["OV-nummer", student.get("student_number", "")],
+        ["Klas", student.get("class_name", "")], ["Versie", project.get("version", "1.0")],
+        ["Datum", display_date(project.get("report_date", ""))], ["Examennaam", project.get("exam_name", "")],
+        ["Examennummer", project.get("exam_number", "")],
+        ["Startdatum examen", display_date(project.get("start_date", ""))],
+        ["Einddatum examen", display_date(project.get("end_date", ""))],
         ["Stagebedrijf", student.get("company", "")], ["Praktijkopleider", student.get("practice_supervisor", "")],
         ["BPV-begeleider", student.get("bpv_supervisor", "")],
     ]
@@ -326,7 +392,12 @@ def build_pdf(report):
                 if data.get("evidence"):
                     story.append(p("Bewijs", styles["H2x"]))
                     add_pdf_list(story, data["evidence"], styles)
-        elif title in {"Examenactiviteiten", "Grenzen en randvoorwaarden", "Planning", "Evaluatie"}:
+                for image in data.get("evidence_images", []):
+                    story.append(p(image["name"], styles["Smallx"]))
+                    picture = ReportLabImage(io.BytesIO(image["bytes"]))
+                    picture._restrictSize(155 * mm, 95 * mm)
+                    story += [picture, Spacer(1, 3 * mm)]
+        elif title in {"Projectgegevens", "Examenactiviteiten", "Grenzen en randvoorwaarden", "Planning", "Evaluatie"}:
             for sub, body in content:
                 if not clean(sub):
                     continue
@@ -408,8 +479,12 @@ def build_docx(report):
     doc.add_paragraph(project.get("subtitle") or project.get("exam_name") or "Examenverslag", style="Subtitle")
     doc.add_paragraph()
     rows = [
-        ("Naam", student.get("name")), ("Klas", student.get("class_name")),
-        ("Versie", project.get("version", "1.0")), ("Datum", display_date(project.get("report_date"))),
+        ("Naam", student.get("name")), ("OV-nummer", student.get("student_number")),
+        ("Klas", student.get("class_name")), ("Versie", project.get("version", "1.0")),
+        ("Datum", display_date(project.get("report_date"))), ("Examennaam", project.get("exam_name")),
+        ("Examennummer", project.get("exam_number")),
+        ("Startdatum examen", display_date(project.get("start_date"))),
+        ("Einddatum examen", display_date(project.get("end_date"))),
         ("Stagebedrijf", student.get("company")), ("Praktijkopleider", student.get("practice_supervisor")),
         ("BPV-begeleider", student.get("bpv_supervisor")),
     ]
@@ -440,7 +515,10 @@ def build_docx(report):
                 if data.get("evidence"):
                     para = doc.add_paragraph(); para.add_run("Bewijs").bold = True
                     add_docx_bullets(doc, data["evidence"])
-        elif title in {"Examenactiviteiten", "Grenzen en randvoorwaarden", "Planning", "Evaluatie"}:
+                for image in data.get("evidence_images", []):
+                    doc.add_paragraph(image["name"], style="Caption")
+                    doc.add_picture(io.BytesIO(image["bytes"]), width=Cm(15.5))
+        elif title in {"Projectgegevens", "Examenactiviteiten", "Grenzen en randvoorwaarden", "Planning", "Evaluatie"}:
             for sub, body in content:
                 if not clean(sub):
                     continue
@@ -471,8 +549,19 @@ def odt_list(items):
 
 def build_odt(report):
     student = report.get("student", {}); project = report.get("project", {})
+    embedded_images = []
     body = [odt_paragraph(project.get("title", "Examenverslag"), "Title"), odt_paragraph(project.get("subtitle") or project.get("exam_name") or "Examenverslag", "Subtitle")]
-    for label, value in (("Naam", student.get("name")), ("Klas", student.get("class_name")), ("Versie", project.get("version", "1.0")), ("Datum", project.get("report_date")), ("Stagebedrijf", student.get("company")), ("Praktijkopleider", student.get("practice_supervisor")), ("BPV-begeleider", student.get("bpv_supervisor"))):
+    cover_fields = (
+        ("Naam", student.get("name")), ("OV-nummer", student.get("student_number")),
+        ("Klas", student.get("class_name")), ("Versie", project.get("version", "1.0")),
+        ("Datum", display_date(project.get("report_date"))), ("Examennaam", project.get("exam_name")),
+        ("Examennummer", project.get("exam_number")),
+        ("Startdatum examen", display_date(project.get("start_date"))),
+        ("Einddatum examen", display_date(project.get("end_date"))),
+        ("Stagebedrijf", student.get("company")), ("Praktijkopleider", student.get("practice_supervisor")),
+        ("BPV-begeleider", student.get("bpv_supervisor")),
+    )
+    for label, value in cover_fields:
         if clean(value):
             body.append(odt_paragraph(f"{label}: {clean(value)}"))
     body.append('<text:p text:style-name="PageBreak"/>')
@@ -489,22 +578,30 @@ def build_odt(report):
                 body.append(odt_paragraph(data.get("body")))
                 if data.get("evidence"):
                     body.append(odt_paragraph("Bewijs", "Heading_20_2")); body.append(odt_list(data["evidence"]))
-        elif title in {"Examenactiviteiten", "Grenzen en randvoorwaarden", "Planning", "Evaluatie"}:
+                for image in data.get("evidence_images", []):
+                    archive_name = f"Pictures/{len(embedded_images) + 1}-{image['name']}"
+                    embedded_images.append((archive_name, image["mime"], image["bytes"]))
+                    body.append(odt_paragraph(image["name"]))
+                    body.append(f'<draw:frame draw:name="Afbeelding{len(embedded_images)}" text:anchor-type="paragraph" svg:width="15.5cm" svg:height="9.5cm"><draw:image xlink:href="{escape(archive_name)}" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/></draw:frame>')
+        elif title in {"Projectgegevens", "Examenactiviteiten", "Grenzen en randvoorwaarden", "Planning", "Evaluatie"}:
             for sub, value in content:
                 if clean(sub): body.append(odt_paragraph(sub, "Heading_20_2"))
                 body.append(odt_list(value) if isinstance(value, list) else odt_paragraph(value))
         else:
             body.extend(odt_paragraph(x) for x in content)
     content_xml = f'''<?xml version="1.0" encoding="UTF-8"?>
-<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" office:version="1.3"><office:automatic-styles><style:style style:name="PageBreak" style:family="paragraph"><style:paragraph-properties fo:break-before="page"/></style:style><text:list-style style:name="L1"><text:list-level-style-bullet text:level="1" text:bullet-char="•"><style:list-level-properties text:space-before="0.65cm" text:min-label-width="0.45cm"/></text:list-level-style-bullet></text:list-style></office:automatic-styles><office:body><office:text>{''.join(body)}</office:text></office:body></office:document-content>'''
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" office:version="1.3"><office:automatic-styles><style:style style:name="PageBreak" style:family="paragraph"><style:paragraph-properties fo:break-before="page"/></style:style><text:list-style style:name="L1"><text:list-level-style-bullet text:level="1" text:bullet-char="•"><style:list-level-properties text:space-before="0.65cm" text:min-label-width="0.45cm"/></text:list-level-style-bullet></text:list-style></office:automatic-styles><office:body><office:text>{''.join(body)}</office:text></office:body></office:document-content>'''
     styles_xml = '''<?xml version="1.0" encoding="UTF-8"?><office:document-styles xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" office:version="1.3"><office:styles><style:default-style style:family="paragraph"><style:text-properties style:font-name="Arial" fo:font-size="10.5pt"/><style:paragraph-properties fo:line-height="115%" fo:margin-bottom="0.18cm"/></style:default-style><style:style style:name="Title" style:family="paragraph"><style:text-properties fo:font-size="28pt" fo:font-weight="bold"/><style:paragraph-properties fo:margin-top="3cm" fo:margin-bottom="0.45cm"/></style:style><style:style style:name="Subtitle" style:family="paragraph"><style:text-properties fo:font-size="15pt"/><style:paragraph-properties fo:margin-bottom="1cm"/></style:style><style:style style:name="Heading_20_1" style:display-name="Heading 1" style:family="paragraph" style:default-outline-level="1"><style:text-properties fo:font-size="18pt" fo:font-weight="bold"/><style:paragraph-properties fo:margin-top="0.5cm" fo:margin-bottom="0.25cm"/></style:style><style:style style:name="Heading_20_2" style:display-name="Heading 2" style:family="paragraph" style:default-outline-level="2"><style:text-properties fo:font-size="13pt" fo:font-weight="bold"/><style:paragraph-properties fo:margin-top="0.35cm" fo:margin-bottom="0.15cm"/></style:style></office:styles></office:document-styles>'''
-    manifest = '''<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/><manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/></manifest:manifest>'''
+    image_manifest = "".join(f'<manifest:file-entry manifest:full-path="{escape(path)}" manifest:media-type="{mime}"/>' for path, mime, _ in embedded_images)
+    manifest = f'''<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/><manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>{image_manifest}</manifest:manifest>'''
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w") as zf:
         zf.writestr("mimetype", "application/vnd.oasis.opendocument.text", compress_type=zipfile.ZIP_STORED)
         zf.writestr("content.xml", content_xml)
         zf.writestr("styles.xml", styles_xml)
         zf.writestr("META-INF/manifest.xml", manifest)
+        for path, _, blob in embedded_images:
+            zf.writestr(path, blob)
     output.seek(0); return output
 
 

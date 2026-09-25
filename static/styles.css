@@ -232,6 +232,14 @@ button { cursor: pointer; }
 .repeat-row { display: grid; grid-template-columns: 1fr auto; gap: 9px; }
 .icon-button { width: 44px; border: 1px solid var(--line); border-radius: 10px; color: #9d3f35; background: white; font-size: 20px; }
 .add-button { border: 0; color: var(--coral); background: transparent; font-weight: 800; font-size: 13px; padding: 4px; }
+.file-button { cursor: pointer; }
+.file-button input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.evidence-images { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+.evidence-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.evidence-grid figure { position: relative; margin: 0; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.evidence-grid img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 6px; }
+.evidence-grid figcaption { margin-top: 6px; padding-right: 34px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11px; }
+.evidence-grid .icon-button { position: absolute; right: 7px; bottom: 5px; width: 28px; height: 28px; }
 
 .phase-card,
 .wp-card,
@@ -297,6 +305,9 @@ button { cursor: pointer; }
 .paper .cover-meta { margin-top: 30px; border-top: 1px solid #dfe3e8; }
 .paper .cover-meta div { display: grid; grid-template-columns: 80px 1fr; gap: 8px; padding: 6px 0; border-bottom: 1px solid #e8eaee; }
 .paper .placeholder { color: #9aa1ad; }
+.paper .preview-evidence { margin: 8px 0 12px; }
+.paper .preview-evidence img { display: block; width: 100%; height: auto; border: 1px solid #e1e4e8; border-radius: 3px; }
+.paper .preview-evidence figcaption { margin-top: 3px; color: #667085; font-size: 8px; }
 
 .bottom-bar {
   position: fixed;
@@ -334,6 +345,7 @@ button { cursor: pointer; }
   #stepNav { display: flex; overflow-x: auto; padding-bottom: 5px; }
   .step-link { flex: 0 0 155px; }
   .field-grid, .export-grid, .phase-grid { grid-template-columns: 1fr; }
+  .evidence-grid { grid-template-columns: 1fr; }
   .field.full { grid-column: auto; }
   .bottom-actions { width: 100%; gap: 7px; }
   .bottom-actions .button { flex: 1; padding: 8px 9px; font-size: 12px; }
