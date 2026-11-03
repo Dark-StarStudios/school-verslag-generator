@@ -30,8 +30,10 @@ De beschreven door mij uitgevoerde werkzaamheden zijn daadwerkelijk door mij ver
     ["Grenzen", "Grenzen en randvoorwaarden", "Maak duidelijk wat wel en niet bij het examen hoort."],
     ["Planning", "Planning", "Zet de fasen, perioden en concrete taken in een realistische volgorde."],
     ["Werkprocessen", "Verantwoording per werkproces", "Koppel je handelen en bewijs aan elk geselecteerd werkproces."],
+    ["Keuzedelen", "Keuzedelen", "Selecteer de D1-werkprocessen van jouw keuzedelen en verantwoord ze afzonderlijk."],
     ["Evaluatie", "Evaluatie", "Evalueer vakinhoudelijk en persoonlijk, inclusief je volgende leerdoel."],
     ["Verklaring", "Verklaring", "Bevestig de verplichte verklaring voor je eigen werk."],
+    ["Vormgeving", "Vormgeving van het document", "Kies de kleur en lettertypen die in het voorbeeld en alle exports worden gebruikt."],
     ["Controleren", "Controleren en exporteren", "Los de laatste inhoudelijke waarschuwingen op en download je verslag."]
   ];
   const state = { report: loadAutosave(), step: 0 };
@@ -68,7 +70,7 @@ De beschreven door mij uitgevoerde werkzaamheden zijn daadwerkelijk door mij ver
     const [short, title, intro] = steps[state.step];
     $("#stepEyebrow").textContent = `STAP ${state.step + 1} VAN ${steps.length}`;
     $("#stepTitle").textContent = title; $("#stepIntro").textContent = intro;
-    $("#stepContent").innerHTML = [renderCover, renderActivities, renderScope, renderPlanning, renderWorkProcesses, renderEvaluation, renderDeclaration, renderChecks][state.step]();
+    $("#stepContent").innerHTML = [renderCover, renderActivities, renderScope, renderPlanning, renderWorkProcesses, renderKeuzedelen, renderEvaluation, renderDeclaration, renderDesign, renderChecks][state.step]();
     $("#previousStep").disabled = state.step === 0;
     $("#nextStep").textContent = state.step === steps.length - 1 ? "Naar het begin" : "Volgende stap";
     renderNav(); bindDynamic(); renderPreview(); updateProgress();
@@ -112,11 +114,48 @@ De beschreven door mij uitgevoerde werkzaamheden zijn daadwerkelijk door mij ver
     const images = wp.evidence_images || [];
     return `<section class="evidence-images"><div class="repeat-head"><div><h3>Screenshots</h3><span class="hint">PNG, JPG of WebP; afbeeldingen komen ook in PDF, DOCX en ODT.</span></div><label class="add-button file-button">+ screenshots<input type="file" accept="image/png,image/jpeg,image/webp" multiple data-evidence-images="${index}"></label></div><div class="evidence-grid">${images.map((image, imageIndex) => `<figure><img src="${escapeHtml(image.data)}" alt="${escapeHtml(image.name || "Bewijs")}"><figcaption>${escapeHtml(image.name || `Screenshot ${imageIndex + 1}`)}</figcaption><button type="button" class="icon-button" data-remove-evidence-image="${index}" data-image-index="${imageIndex}" aria-label="Screenshot verwijderen">×</button></figure>`).join("") || `<span class="hint">Nog geen screenshots toegevoegd.</span>`}</div></section>`;
   }
+  function renderKeuzedelen() {
+    return `<p class="hint choice-intro">Selecteer per keuzedeel alleen de D1-werkprocessen waarop je wordt beoordeeld. Ze werken hetzelfde als de gewone werkprocessen.</p>` + (state.report.keuzedelen || []).map((choice, choiceIndex) => `<article class="choice-card">
+      <div class="choice-top"><div><div class="choice-title"><strong>${escapeHtml(choice.code)} — ${escapeHtml(choice.title)}</strong><span class="choice-badge">keuzedeel</span></div><span class="choice-certificate">${escapeHtml(choice.certificate)}</span></div></div>
+      <div class="choice-work-processes">${(choice.work_processes || []).map((process, processIndex) => `<section class="wp-card choice-wp-card"><div class="wp-top"><div><span class="wp-code">${escapeHtml(process.code)}</span><h3>${escapeHtml(process.title)}</h3></div><label class="switch" aria-label="${escapeHtml(process.code)} selecteren"><input type="checkbox" data-choice-wp-select="${choiceIndex}" data-choice-process="${processIndex}" ${process.selected ? "checked" : ""}><span></span></label></div>${process.selected ? `<div class="field"><label>Mijn verantwoording *</label><textarea data-path="keuzedelen.${choiceIndex}.work_processes.${processIndex}.accountability" rows="7" placeholder="Beschrijf situatie, jouw eigen handelingen, gemaakte keuzes, resultaat en wat je daarvan hebt geleerd.">${escapeHtml(process.accountability || "")}</textarea><small>Schrijf in de ik-vorm en verwijs naar controleerbaar bewijs.</small></div><div style="margin-top:14px">${repeatSection("Bewijs", `keuzedelen.${choiceIndex}.work_processes.${processIndex}.evidence`, "Bijvoorbeeld ontwerp, commit, testresultaat of feedback")}</div>${choiceEvidenceImages(process, choiceIndex, processIndex)}` : ""}</section>`).join("")}</div>
+    </article>`).join("");
+  }
+  function choiceEvidenceImages(process, choiceIndex, processIndex) {
+    const images = process.evidence_images || [];
+    return `<section class="evidence-images"><div class="repeat-head"><div><h3>Screenshots</h3><span class="hint">Deze afbeeldingen komen ook in PDF, DOCX en ODT.</span></div><label class="add-button file-button">+ screenshots<input type="file" accept="image/png,image/jpeg,image/webp" multiple data-choice-images="${choiceIndex}" data-choice-process="${processIndex}"></label></div><div class="evidence-grid">${images.map((image, imageIndex) => `<figure><img src="${escapeHtml(image.data)}" alt="${escapeHtml(image.name || "Bewijs")}"><figcaption>${escapeHtml(image.name || `Screenshot ${imageIndex + 1}`)}</figcaption><button type="button" class="icon-button" data-remove-choice-image="${choiceIndex}" data-choice-process="${processIndex}" data-image-index="${imageIndex}" aria-label="Screenshot verwijderen">×</button></figure>`).join("") || `<span class="hint">Nog geen screenshots toegevoegd.</span>`}</div></section>`;
+  }
   function renderEvaluation() {
     return `<div class="field-grid">${field("Vakinhoudelijke evaluatie", "evaluation.professional", {type:"textarea", full:true, required:true, placeholder:"Wat wilde je leren, wat heb je geleerd, wat ging goed en wat kon beter?"})}${field("Persoonlijke evaluatie", "evaluation.personal", {type:"textarea", full:true, required:true, placeholder:"Wat heb je over samenwerken, plannen, communiceren en jezelf geleerd?"})}${field("Volgend project", "evaluation.next_project", {type:"textarea", full:true, required:true, placeholder:"Wat ga je de volgende keer concreet anders doen of verder leren?"})}</div>`;
   }
   function renderDeclaration() {
-    return `<div class="declaration">${escapeHtml(DECLARATION)}</div><label class="check-card" style="margin-top:18px"><input type="checkbox" id="declarationAccepted" ${state.report.declaration_accepted ? "checked" : ""}><span><strong>Ik neem deze verklaring op in mijn verslag</strong><p>Controleer vóór inleveren of alle beschreven werkzaamheden echt door jou zijn uitgevoerd.</p></span></label>`;
+    const color = /^#[0-9a-f]{6}$/i.test(state.report.design?.declaration_color || "") ? state.report.design.declaration_color : "#FF5F57";
+    return `<div class="declaration" style="--declaration-color:${escapeHtml(color)}">${escapeHtml(DECLARATION)}</div><label class="check-card" style="margin-top:18px"><input type="checkbox" id="declarationAccepted" ${state.report.declaration_accepted ? "checked" : ""}><span><strong>Ik neem deze verklaring op in mijn verslag</strong><p>Controleer vóór inleveren of alle beschreven werkzaamheden echt door jou zijn uitgevoerd.</p></span></label>`;
+  }
+  function renderDesign() {
+    const d = state.report.design || {};
+    const fontOptions = ["Arial", "Georgia", "Times New Roman", "Verdana"];
+    const select = (label, path, selected) => `<div class="field"><label>${label}</label><select data-path="${path}">${fontOptions.map(font => `<option value="${font}" ${font === selected ? "selected" : ""}>${font}</option>`).join("")}</select></div>`;
+    const presets = ["#5B9BD5", "#2F5597", "#2E7D6E", "#7A5195", "#C55A11", "#000000", "#D32F2F"];
+    const declarationPresets = ["#FF5F57", "#D32F2F", "#000000", "#3858E8"];
+    const coverType = d.cover_background_type || "solid";
+    return `<div class="design-panel">
+      <div class="field color-field"><label>Kleur van titels en tussenkoppen</label><div class="color-control"><input data-path="design.heading_color" type="color" value="${escapeHtml(d.heading_color || "#5B9BD5")}"><input data-path="design.heading_color" type="text" value="${escapeHtml(d.heading_color || "#5B9BD5")}" maxlength="7" pattern="#[0-9A-Fa-f]{6}" aria-label="Hexadecimale kleur"></div><small>De gekozen kleur wordt toegepast op de titel, hoofdstukken en subkoppen.</small></div>
+      <div class="color-presets" aria-label="Kleurvoorbeelden">${presets.map(color => `<button type="button" data-color-preset="${color}" style="--swatch:${color}" aria-label="Kies ${color}" title="${color}"></button>`).join("")}</div>
+      <div class="field-grid">${select("Lettertype van titels", "design.heading_font", d.heading_font || "Arial")}${select("Lettertype van tekst", "design.body_font", d.body_font || "Arial")}</div>
+      <div class="field"><label>Achtergrond van het voorblad</label><select data-path="design.cover_background_type"><option value="solid" ${coverType === "solid" ? "selected" : ""}>Effen kleur</option><option value="gradient" ${coverType === "gradient" ? "selected" : ""}>Kleurverloop (gradient)</option></select><small>Het kleurverloop wordt in het voorbeeld en alle exports toegepast.</small></div>
+      <div class="field-grid">
+        <div class="field color-field"><label>${coverType === "gradient" ? "Beginkleur van het verloop" : "Achtergrondkleur van het voorblad"}</label><div class="color-control"><input data-path="design.cover_background_color" type="color" value="${escapeHtml(d.cover_background_color || "#FFFFFF")}"><input data-path="design.cover_background_color" type="text" value="${escapeHtml(d.cover_background_color || "#FFFFFF")}" maxlength="7" pattern="#[0-9A-Fa-f]{6}" aria-label="Beginkleur voorblad"></div></div>
+        <div class="field color-field"><label>Eindkleur van het verloop</label><div class="color-control"><input data-path="design.cover_gradient_end_color" type="color" value="${escapeHtml(d.cover_gradient_end_color || "#3858E8")}"><input data-path="design.cover_gradient_end_color" type="text" value="${escapeHtml(d.cover_gradient_end_color || "#3858E8")}" maxlength="7" pattern="#[0-9A-Fa-f]{6}" aria-label="Eindkleur kleurverloop"></div><small>Wordt alleen gebruikt wanneer kleurverloop is gekozen.</small></div>
+      </div>
+      <div class="field-grid">
+        <div class="field"><label>Richting van het kleurverloop</label><select data-path="design.cover_gradient_direction"><option value="diagonal" ${(d.cover_gradient_direction || "diagonal") === "diagonal" ? "selected" : ""}>Diagonaal</option><option value="vertical" ${d.cover_gradient_direction === "vertical" ? "selected" : ""}>Verticaal</option><option value="horizontal" ${d.cover_gradient_direction === "horizontal" ? "selected" : ""}>Horizontaal</option></select></div>
+        <div class="field color-field"><label>Tekstkleur op het voorblad</label><div class="color-control"><input data-path="design.cover_text_color" type="color" value="${escapeHtml(d.cover_text_color || "#FFFFFF")}"><input data-path="design.cover_text_color" type="text" value="${escapeHtml(d.cover_text_color || "#FFFFFF")}" maxlength="7" pattern="#[0-9A-Fa-f]{6}" aria-label="Tekstkleur voorblad"></div></div>
+      </div>
+      <div class="field color-field"><label>Kleur van de verklaring</label><div class="color-control"><input data-path="design.declaration_color" type="color" value="${escapeHtml(d.declaration_color || "#FF5F57")}"><input data-path="design.declaration_color" type="text" value="${escapeHtml(d.declaration_color || "#FF5F57")}" maxlength="7" pattern="#[0-9A-Fa-f]{6}" aria-label="Kleur verklaring"></div><small>Deze kleur wordt gebruikt voor de accentlijn en de subtiele achtergrond van de verklaring.</small></div>
+      <div class="color-presets" aria-label="Kleurvoorbeelden voor verklaring">${declarationPresets.map(color => `<button type="button" data-declaration-color-preset="${color}" style="--swatch:${color}" aria-label="Kies ${color} voor de verklaring" title="${color}"></button>`).join("")}</div>
+      <section class="cover-logo-field"><div class="repeat-head"><div><h3>Logo op het voorblad</h3><span class="hint">PNG, JPG of WebP. Het logo blijft lokaal in het concept opgeslagen.</span></div><label class="add-button file-button">${d.cover_logo?.data ? "Logo vervangen" : "+ logo toevoegen"}<input type="file" accept="image/png,image/jpeg,image/webp" data-cover-logo></label></div>${d.cover_logo?.data ? `<figure><img src="${escapeHtml(d.cover_logo.data)}" alt="${escapeHtml(d.cover_logo.name || "Voorbladlogo")}"><figcaption>${escapeHtml(d.cover_logo.name || "Voorbladlogo")}</figcaption><button type="button" class="icon-button" data-remove-cover-logo aria-label="Logo verwijderen">×</button></figure>` : `<span class="hint">Nog geen logo toegevoegd.</span>`}</section>
+      <p class="hint design-note">DOCX en ODT gebruiken het gekozen lettertype rechtstreeks. PDF gebruikt een veilige, gelijkende letterfamilie zodat het bestand overal opent.</p>
+    </div>`;
   }
   function renderChecks() {
     const checks = qualityChecks(); const errors = checks.filter(x => !x.ok);
@@ -124,7 +163,13 @@ De beschreven door mij uitgevoerde werkzaamheden zijn daadwerkelijk door mij ver
   }
   function bindDynamic() {
     $$('[data-path]').forEach(el => {
-      const sync = () => { setValue(el.dataset.path, el.value); scheduleSave(); renderPreview(); updateProgress(); };
+      const sync = () => {
+        setValue(el.dataset.path, el.value);
+        $$(`[data-path="${el.dataset.path}"]`).forEach(peer => {
+          if (peer !== el && (peer.type !== "color" || /^#[0-9a-f]{6}$/i.test(el.value))) peer.value = el.value;
+        });
+        scheduleSave(); renderPreview(); updateProgress();
+      };
       el.addEventListener("input", sync);
       // Date pickers and some autofill implementations only emit change.
       el.addEventListener("change", sync);
@@ -138,6 +183,21 @@ De beschreven door mij uitgevoerde werkzaamheden zijn daadwerkelijk door mij ver
     $$('[data-remove-list]').forEach(el => el.addEventListener("click", () => { list(el.dataset.removeList).splice(Number(el.dataset.index), 1); scheduleSave(); renderStep(); }));
     $$('[data-step]').forEach(el => el.addEventListener("click", () => { state.step = Number(el.dataset.step); renderStep(); }));
     $$('[data-wp-select]').forEach(el => el.addEventListener("change", () => { state.report.work_processes[Number(el.dataset.wpSelect)].selected = el.checked; scheduleSave(); renderStep(); }));
+    $$('[data-choice-wp-select]').forEach(el => el.addEventListener("change", () => {
+      state.report.keuzedelen[Number(el.dataset.choiceWpSelect)].work_processes[Number(el.dataset.choiceProcess)].selected = el.checked;
+      scheduleSave(); renderStep();
+    }));
+    $$('[data-color-preset]').forEach(el => el.addEventListener("click", () => { state.report.design.heading_color = el.dataset.colorPreset; scheduleSave(); renderStep(); }));
+    $$('[data-declaration-color-preset]').forEach(el => el.addEventListener("click", () => { state.report.design.declaration_color = el.dataset.declarationColorPreset; scheduleSave(); renderStep(); }));
+    $('[data-path="design.cover_background_type"]')?.addEventListener("change", () => renderStep());
+    $('[data-cover-logo]')?.addEventListener("change", async event => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      state.report.design ||= {};
+      state.report.design.cover_logo = {name:file.name, type:file.type, data:await fileToDataUrl(file)};
+      scheduleSave(); renderStep();
+    });
+    $('[data-remove-cover-logo]')?.addEventListener("click", () => { state.report.design.cover_logo = null; scheduleSave(); renderStep(); });
     $$('[data-remove-phase]').forEach(el => el.addEventListener("click", () => { state.report.planning.splice(Number(el.dataset.removePhase), 1); scheduleSave(); renderStep(); }));
     $("#addPhase")?.addEventListener("click", () => { state.report.planning.push({phase:"", period:"", tasks:[]}); scheduleSave(); renderStep(); });
     $("#declarationAccepted")?.addEventListener("change", e => { state.report.declaration_accepted = e.target.checked; scheduleSave(); renderPreview(); updateProgress(); });
@@ -155,6 +215,20 @@ De beschreven door mij uitgevoerde werkzaamheden zijn daadwerkelijk door mij ver
       (wp.evidence_images ||= []).splice(Number(el.dataset.imageIndex), 1);
       scheduleSave(); renderStep();
     }));
+    $$('[data-choice-images]').forEach(el => el.addEventListener("change", async () => {
+      const process = state.report.keuzedelen[Number(el.dataset.choiceImages)].work_processes[Number(el.dataset.choiceProcess)];
+      process.evidence_images ||= [];
+      for (const file of [...el.files]) {
+        if (!/^image\/(png|jpeg|webp)$/.test(file.type)) continue;
+        process.evidence_images.push({name:file.name, type:file.type, data:await fileToDataUrl(file)});
+      }
+      scheduleSave(); renderStep();
+    }));
+    $$('[data-remove-choice-image]').forEach(el => el.addEventListener("click", () => {
+      const process = state.report.keuzedelen[Number(el.dataset.removeChoiceImage)].work_processes[Number(el.dataset.choiceProcess)];
+      (process.evidence_images ||= []).splice(Number(el.dataset.imageIndex), 1);
+      scheduleSave(); renderStep();
+    }));
     $$('[data-export]').forEach(el => el.addEventListener("click", () => exportReport(el.dataset.export, el)));
   }
   function stepComplete(i) {
@@ -164,8 +238,10 @@ De beschreven door mij uitgevoerde werkzaamheden zijn daadwerkelijk door mij ver
     if (i === 2) return r.scope.included.length && r.scope.excluded.length && r.scope.provided.length;
     if (i === 3) return r.planning.length && r.planning.every(x => x.phase && x.tasks.length);
     if (i === 4) { const selected = r.work_processes.filter(x => x.selected); return selected.length > 0 && selected.every(x => (x.accountability || "").trim().length >= 80 && ((x.evidence || []).length || (x.evidence_images || []).length)); }
-    if (i === 5) return Object.values(r.evaluation).every(x => (x || "").trim().length >= 80);
-    if (i === 6) return r.declaration_accepted;
+    if (i === 5) { const selected = (r.keuzedelen || []).flatMap(choice => (choice.work_processes || []).filter(x => x.selected)); return !selected.length || selected.every(x => (x.accountability || "").trim().length >= 80 && ((x.evidence || []).length || (x.evidence_images || []).length)); }
+    if (i === 6) return Object.values(r.evaluation).every(x => (x || "").trim().length >= 80);
+    if (i === 7) return r.declaration_accepted;
+    if (i === 8) return /^#[0-9a-f]{6}$/i.test(r.design?.heading_color || "") && Boolean(r.design?.heading_font && r.design?.body_font);
     return qualityChecks().every(x => x.ok);
   }
   function updateProgress() {
@@ -174,7 +250,8 @@ De beschreven door mij uitgevoerde werkzaamheden zijn daadwerkelijk door mij ver
     $("#progressLabel").textContent = `${pct}%`; $("#progressBar").style.width = `${pct}%`;
     $("#progressHint").textContent = done === steps.length ? "Klaar voor de laatste eigen controle." : `${done} van ${steps.length} onderdelen compleet.`;
     const selected = state.report.work_processes.filter(item => item.selected).length;
-    $("#selectedCount").textContent = `${selected} werkprocessen geselecteerd`;
+    const selectedChoices = (state.report.keuzedelen || []).flatMap(choice => choice.work_processes || []).filter(item => item.selected).length;
+    $("#selectedCount").textContent = selectedChoices ? `${selected} gewone + ${selectedChoices} keuze-werkprocessen geselecteerd` : `${selected} werkprocessen geselecteerd`;
   }
   function qualityChecks() {
     const r = state.report; const selected = r.work_processes.filter(x => x.selected);
@@ -184,13 +261,26 @@ De beschreven door mij uitgevoerde werkzaamheden zijn daadwerkelijk door mij ver
       {title:"Voorblad en inleiding", ok:stepComplete(0), message:stepComplete(0)?"De verplichte basisgegevens zijn ingevuld.":"Vul titel, naam, klas, opdrachtgever, datum en inleiding in."},
       {title:"Afbakening en planning", ok:stepComplete(2)&&stepComplete(3), message:stepComplete(2)&&stepComplete(3)?"Scope en projectfasen zijn beschreven.":"Beschrijf wat wel en niet hoort bij het examen en voeg taken per fase toe."},
       {title:"Alle geselecteerde werkprocessen verantwoord", ok:stepComplete(4), message:stepComplete(4)?"Elk werkproces heeft een toelichting en bewijs.":"Schrijf per geselecteerd werkproces minimaal een concrete toelichting en voeg bewijs toe."},
+      {title:"Geselecteerde keuzedelen verantwoord", ok:stepComplete(5), message:stepComplete(5)?"De keuzedelen zijn niet geselecteerd of volledig verantwoord.":"Schrijf per werkproces van ieder geselecteerd keuzedeel een toelichting en voeg bewijs toe."},
       {title:"Feitelijke formulering", ok:future < 3, message:future < 3?"De verantwoording gebruikt hoofdzakelijk gerealiseerde resultaten.":"Er staat veel toekomsttaal in de verantwoording. Beschrijf wat je daadwerkelijk hebt gedaan."},
-      {title:"Vakinhoudelijk en persoonlijk geëvalueerd", ok:stepComplete(5), message:stepComplete(5)?"Beide evaluaties en een volgend leerdoel zijn aanwezig.":"Werk beide evaluaties uit en benoem een concreet volgend leerdoel."},
+      {title:"Vakinhoudelijk en persoonlijk geëvalueerd", ok:stepComplete(6), message:stepComplete(6)?"Beide evaluaties en een volgend leerdoel zijn aanwezig.":"Werk beide evaluaties uit en benoem een concreet volgend leerdoel."},
       {title:"Verklaring opgenomen", ok:r.declaration_accepted, message:r.declaration_accepted?"De verplichte verklaring komt in elke export.":"Bevestig de verklaring voordat je inlevert."}
     ];
   }
   function renderPreview() {
     const r = state.report, s = r.student, p = r.project;
+    const design = r.design || {};
+    const paper = $("#previewPaper");
+    paper.style.setProperty("--document-heading", /^#[0-9a-f]{6}$/i.test(design.heading_color || "") ? design.heading_color : "#5B9BD5");
+    paper.style.setProperty("--document-heading-font", JSON.stringify(design.heading_font || "Arial"));
+    paper.style.setProperty("--document-body-font", JSON.stringify(design.body_font || "Arial"));
+    const coverStart = /^#[0-9a-f]{6}$/i.test(design.cover_background_color || "") ? design.cover_background_color : "#FFFFFF";
+    const coverEnd = /^#[0-9a-f]{6}$/i.test(design.cover_gradient_end_color || "") ? design.cover_gradient_end_color : "#3858E8";
+    const gradientDirection = ({vertical:"to bottom", horizontal:"to right", diagonal:"135deg"})[design.cover_gradient_direction] || "135deg";
+    const coverBackground = design.cover_background_type === "gradient" ? `linear-gradient(${gradientDirection}, ${coverStart}, ${coverEnd})` : coverStart;
+    paper.style.setProperty("--cover-background", coverBackground);
+    paper.style.setProperty("--cover-text", /^#[0-9a-f]{6}$/i.test(design.cover_text_color || "") ? design.cover_text_color : "#FFFFFF");
+    paper.style.setProperty("--declaration-color", /^#[0-9a-f]{6}$/i.test(design.declaration_color || "") ? design.declaration_color : "#FF5F57");
     $("#previewTitle").textContent = p.title || "Examenverslag";
     const meta = [
       ["Naam", s.name], ["OV-nummer", s.student_number], ["Klas", s.class_name],
@@ -201,11 +291,12 @@ De beschreven door mij uitgevoerde werkzaamheden zijn daadwerkelijk door mij ver
       ["BPV-begeleider", s.bpv_supervisor]
     ].filter(([, content]) => content);
     const selected = r.work_processes.filter(x=>x.selected);
+    const selectedChoices = (r.keuzedelen || []).filter(choice => (choice.work_processes || []).some(process => process.selected));
     const planning = (r.planning || []).filter(x => x.phase || x.period || x.tasks?.some(Boolean));
-    $("#previewPaper").innerHTML = `
-      <h1>${escapeHtml(p.title || "Titel van het project")}</h1>
-      <p>${escapeHtml(p.subtitle || p.exam_name || "Examenverslag")}</p>
-      <div class="cover-meta">${meta.map(([label, content])=>`<div><strong>${escapeHtml(label)}</strong><span>${escapeHtml(content)}</span></div>`).join("") || `<p class="placeholder">Vul de basisgegevens in.</p>`}</div>
+    const customCover = Boolean(design.cover_logo?.data || design.cover_background_type === "gradient" || (design.cover_background_color && design.cover_background_color.toUpperCase() !== "#FFFFFF"));
+    const coverHtml = customCover ? `<section class="preview-cover-custom">${design.cover_logo?.data ? `<div class="preview-cover-logo"><img src="${escapeHtml(design.cover_logo.data)}" alt="${escapeHtml(design.cover_logo.name || "Logo")}"></div>` : ""}<div class="preview-cover-panel"><h1>${escapeHtml(p.title || "Titel van het project")}</h1><p class="preview-cover-version">Versie ${escapeHtml(p.version || "1.0")}</p><p class="preview-cover-author">${escapeHtml(s.name || "Naam student")}<br>${escapeHtml(displayDate(p.report_date) || "Verslagdatum")}</p><p class="preview-cover-company">Stagebedrijf: ${escapeHtml(s.company || "-")}<br>Stagebegeleider: ${escapeHtml(s.practice_supervisor || "-")}<br>BPV: ${escapeHtml(s.bpv_supervisor || "-")}</p></div></section>` : `<h1>${escapeHtml(p.title || "Titel van het project")}</h1><p>${escapeHtml(p.subtitle || p.exam_name || "Examenverslag")}</p><div class="cover-meta">${meta.map(([label, content])=>`<div><strong>${escapeHtml(label)}</strong><span>${escapeHtml(content)}</span></div>`).join("") || `<p class="placeholder">Vul de basisgegevens in.</p>`}</div>`;
+    paper.innerHTML = `
+      ${coverHtml}
       <h2>Inleiding</h2>${previewText(p.introduction || p.description, "De inleiding verschijnt hier.")}
       <h2>Projectgegevens</h2>
       <h3>Op te leveren producten</h3>${previewList(p.products)}
@@ -220,11 +311,12 @@ De beschreven door mij uitgevoerde werkzaamheden zijn daadwerkelijk door mij ver
       <h3>Wat stelt de opdrachtgever beschikbaar?</h3>${previewList(r.scope.provided)}
       <h2>Planning</h2>${planning.length ? planning.map(x=>`<h3>${escapeHtml(x.phase || "Projectfase")}${x.period ? ` — ${escapeHtml(x.period)}` : ""}</h3>${previewList(x.tasks)}`).join("") : `<p class="placeholder">Nog geen projectfasen ingevuld.</p>`}
       <h2>Verantwoording</h2>${selected.length ? selected.map(x=>`<h3>${escapeHtml(x.code)} ${escapeHtml(x.title)}</h3>${x.competencies?.length ? `<p><strong>Competenties:</strong> ${escapeHtml(x.competencies.join(", "))}</p>` : ""}${previewText(x.accountability, "Nog te beschrijven.")}<h3>Bewijs</h3>${previewList(x.evidence)}${previewImages(x.evidence_images)}`).join("") : `<p class="placeholder">Nog geen werkprocessen geselecteerd.</p>`}
+      ${selectedChoices.length ? `<h2>Keuzedelen</h2>${selectedChoices.map(choice => `<h3>${escapeHtml(choice.code)} — ${escapeHtml(choice.title)}</h3><p><strong>Code:</strong> ${escapeHtml(choice.certificate)}</p>${(choice.work_processes || []).filter(process => process.selected).map(process => `<h3>${escapeHtml(process.code)} — ${escapeHtml(process.title)}</h3>${previewText(process.accountability, "Nog te beschrijven.")}<h3>Bewijs</h3>${previewList(process.evidence)}${previewImages(process.evidence_images)}`).join("")}`).join("")}` : ""}
       <h2>Evaluatie</h2>
       <h3>Vakinhoudelijke evaluatie</h3>${previewText(r.evaluation.professional, "Nog te schrijven.")}
       <h3>Persoonlijke evaluatie</h3>${previewText(r.evaluation.personal, "Nog te schrijven.")}
       <h3>Volgend project</h3>${previewText(r.evaluation.next_project, "Nog te schrijven.")}
-      <h2>Verklaring</h2>${r.declaration_accepted ? previewText(DECLARATION) : `<p class="placeholder">Bevestig de verklaring om deze op te nemen.</p>`}`;
+      <h2>Verklaring</h2>${r.declaration_accepted ? `<div class="preview-declaration">${previewText(DECLARATION)}</div>` : `<p class="placeholder">Bevestig de verklaring om deze op te nemen.</p>`}`;
   }
   function displayDate(date) {
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date || "");

@@ -81,7 +81,54 @@
       "accountability": "", "evidence": []
     }
   ],
+  "keuzedelen": [
+    {
+      "code": "K0505", "title": "Verdieping software", "certificate": "K050501", "selected": false,
+      "work_processes": [
+        {"code": "D1-K1-W1", "title": "Maakt een keuze voor software", "selected": false, "accountability": "", "evidence": [], "evidence_images": []},
+        {"code": "D1-K1-W2", "title": "Maakt zich de software eigen", "selected": false, "accountability": "", "evidence": [], "evidence_images": []}
+      ]
+    },
+    {
+      "code": "K0023", "title": "Digitale vaardigheden gevorderd", "certificate": "K002301", "selected": false,
+      "work_processes": [
+        {"code": "D1-K1-W1", "title": "Wint digitale informatie in", "selected": false, "accountability": "", "evidence": [], "evidence_images": []},
+        {"code": "D1-K2-W1", "title": "Maakt een weergave van informatie", "selected": false, "accountability": "", "evidence": [], "evidence_images": []},
+        {"code": "D1-K2-W2", "title": "Stelt content samen", "selected": false, "accountability": "", "evidence": [], "evidence_images": []},
+        {"code": "D1-K2-W3", "title": "Deelt informatie/content", "selected": false, "accountability": "", "evidence": [], "evidence_images": []},
+        {"code": "D1-K3-W1", "title": "Organiseert het beheer", "selected": false, "accountability": "", "evidence": [], "evidence_images": []},
+        {"code": "D1-K3-W2", "title": "Deelt informatie in", "selected": false, "accountability": "", "evidence": [], "evidence_images": []},
+        {"code": "D1-K3-W3", "title": "Bewaakt bewaaromstandigheden", "selected": false, "accountability": "", "evidence": [], "evidence_images": []}
+      ]
+    },
+    {
+      "code": "K0226", "title": "Inspelen op innovaties geschikt voor niveau 4", "certificate": "K022601", "selected": false,
+      "work_processes": [
+        {"code": "D1-K1-W1", "title": "Reflecteert op het eigen beroepsmatig handelen in het kader van innovatie", "selected": false, "accountability": "", "evidence": [], "evidence_images": []}
+      ]
+    },
+    {
+      "code": "K0767", "title": "Grafisch ontwerp voor webdevelopment", "certificate": "K076701", "selected": false,
+      "work_processes": [
+        {"code": "D1-K1-W1", "title": "Inventariseert de ontwerpeisen voor een eenvoudig grafisch ontwerp voor een (web-) user interface", "selected": false, "accountability": "", "evidence": [], "evidence_images": []},
+        {"code": "D1-K1-W2", "title": "Maakt een eenvoudig grafisch ontwerp voor de (web-) user interface", "selected": false, "accountability": "", "evidence": [], "evidence_images": []},
+        {"code": "D1-K1-W3", "title": "Implementeert het eenvoudige grafische ontwerp in een (web-) user interface", "selected": false, "accountability": "", "evidence": [], "evidence_images": []}
+      ]
+    }
+  ],
   "evaluation": {"professional": "", "personal": "", "next_project": ""},
+  "design": {
+    "heading_color": "#5B9BD5",
+    "heading_font": "Arial",
+    "body_font": "Arial",
+    "cover_background_color": "#FFFFFF",
+    "cover_background_type": "solid",
+    "cover_gradient_end_color": "#3858E8",
+    "cover_gradient_direction": "diagonal",
+    "cover_text_color": "#FFFFFF",
+    "declaration_color": "#FF5F57",
+    "cover_logo": null
+  },
   "declaration_accepted": false
 }
 

@@ -243,6 +243,7 @@ button { cursor: pointer; }
 
 .phase-card,
 .wp-card,
+.choice-card,
 .check-card {
   padding: 18px;
   margin-bottom: 13px;
@@ -251,6 +252,16 @@ button { cursor: pointer; }
   background: #fff;
 }
 .phase-card, .wp-card { background: #fcfbfa; }
+.choice-intro { margin: 0 0 16px; }
+.choice-card { padding: 20px; background: #fff; }
+.choice-top { display: block; }
+.choice-title { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.choice-title strong { font-size: 16px; font-weight: 500; color: #655f5a; }
+.choice-badge { padding: 1px 10px; color: var(--violet); border: 1px solid var(--violet); border-radius: 999px; font-size: 11px; }
+.choice-certificate { display: block; margin-top: 3px; color: #77716b; font-size: 12px; font-weight: 800; }
+.choice-work-processes { display: grid; gap: 10px; margin-top: 16px; }
+.choice-wp-card { margin: 0; background: #fcfbfa; }
+.choice-wp-card .field { margin-top: 16px; }
 .phase-grid { display: grid; grid-template-columns: 1.25fr .75fr; gap: 14px; }
 .wp-top { display: flex; justify-content: space-between; gap: 14px; align-items: start; }
 .wp-code { display: inline-block; color: var(--coral); font-size: 11px; font-weight: 900; letter-spacing: .075em; }
@@ -274,7 +285,20 @@ button { cursor: pointer; }
 .export-button { min-height: 104px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 12px; background: #fff; font-weight: 850; }
 .export-button:hover { border-color: #ffb8af; background: #fff9f8; }
 .export-button span { display: block; color: var(--muted); font-weight: 500; font-size: 12px; }
-.declaration { padding: 17px; white-space: pre-line; border: 1px solid var(--line); border-left: 4px solid var(--coral); border-radius: 10px; background: #fcfbfa; }
+.declaration { padding: 17px; white-space: pre-line; border: 1px solid var(--line); border-left: 4px solid var(--declaration-color, var(--coral)); border-radius: 10px; background: color-mix(in srgb, var(--declaration-color, var(--coral)) 7%, white); }
+.design-panel { display: grid; gap: 20px; }
+.color-field { max-width: 540px; }
+.color-control { display: grid; grid-template-columns: 64px 1fr; gap: 10px; }
+.color-control input[type="color"] { min-height: 46px; padding: 4px; cursor: pointer; }
+.color-presets { display: flex; flex-wrap: wrap; gap: 10px; margin-top: -8px; }
+.color-presets button { width: 34px; height: 34px; border: 3px solid #fff; border-radius: 50%; background: var(--swatch); box-shadow: 0 0 0 1px var(--line); }
+.color-presets button:hover { transform: scale(1.08); }
+.design-note { margin: 0; padding: 13px 15px; border-radius: 10px; background: #f7f6ff; border: 1px solid #dedbff; }
+.cover-logo-field { padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: #fbfbfb; }
+.cover-logo-field figure { position: relative; display: inline-grid; gap: 6px; margin: 14px 0 0; padding: 12px 42px 12px 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.cover-logo-field img { width: min(280px, 100%); max-height: 110px; object-fit: contain; object-position: left center; }
+.cover-logo-field figcaption { color: var(--muted); font-size: 12px; }
+.cover-logo-field .icon-button { position: absolute; top: 8px; right: 8px; }
 
 .preview {
   position: fixed;
@@ -296,14 +320,25 @@ button { cursor: pointer; }
 .preview-head { display: flex; justify-content: space-between; gap: 14px; align-items: center; margin-bottom: 14px; }
 .preview-head strong { display: block; margin-top: 3px; max-width: 270px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .page-pill { padding: 4px 8px; border-radius: 99px; background: #dedbd7; color: #6f6862; font-size: 10px; font-weight: 800; }
-.paper { min-height: 630px; padding: 45px 42px; background: var(--paper); box-shadow: 0 8px 28px rgba(35,35,35,.09); color: #272b33; font-family: Arial, sans-serif; font-size: 9px; line-height: 1.5; }
-.paper h1 { margin: 88px 0 9px; color: #101828; font: 700 28px/1.05 Georgia, serif; }
-.paper h2 { margin: 25px 0 7px; font-size: 15px; color: #111; }
-.paper h3 { margin: 15px 0 4px; font-size: 11px; }
+.paper { min-height: 630px; padding: 45px 42px; background: var(--paper); box-shadow: 0 8px 28px rgba(35,35,35,.09); color: #272b33; font-family: var(--document-body-font, Arial), sans-serif; font-size: 9px; line-height: 1.5; }
+.paper h1 { margin: 88px 0 9px; color: var(--document-heading, #5B9BD5); font-family: var(--document-heading-font, Arial), sans-serif; font-size: 28px; line-height: 1.05; font-weight: 700; }
+.paper h2 { margin: 25px 0 7px; font-family: var(--document-heading-font, Arial), sans-serif; font-size: 15px; color: var(--document-heading, #5B9BD5); }
+.paper h3 { margin: 15px 0 4px; font-family: var(--document-heading-font, Arial), sans-serif; font-size: 11px; color: var(--document-heading, #5B9BD5); }
 .paper p { margin: 0 0 7px; }
 .paper ul { padding-left: 16px; margin: 4px 0 9px; }
 .paper .cover-meta { margin-top: 30px; border-top: 1px solid #dfe3e8; }
 .paper .cover-meta div { display: grid; grid-template-columns: 80px 1fr; gap: 8px; padding: 6px 0; border-bottom: 1px solid #e8eaee; }
+.paper .preview-cover-custom { margin: -45px -42px 30px; background: #fff; }
+.paper .preview-cover-logo { min-height: 205px; display: flex; align-items: flex-end; padding: 34px 42px 24px; }
+.paper .preview-cover-logo img { display: block; width: 72%; max-height: 108px; object-fit: contain; object-position: left bottom; }
+.paper .preview-cover-panel { min-height: 365px; display: flex; flex-direction: column; padding: 45px 42px 36px; color: var(--cover-text, #fff); background: var(--cover-background, #8fa4ee); }
+.paper .preview-cover-panel h1 { margin: 0 0 8px; color: inherit; font-size: 30px; line-height: 1.08; }
+.paper .preview-cover-panel p { color: inherit; }
+.paper .preview-cover-version { font-size: 18px; }
+.paper .preview-cover-author { margin-top: 26px !important; font-size: 15px; }
+.paper .preview-cover-company { margin-top: auto !important; font-size: 13px; }
+.paper .preview-declaration { margin-top: 7px; padding: 11px 12px; border: 1px solid #e2e6ed; border-left: 4px solid var(--declaration-color, #ff5f57); border-radius: 5px; background: color-mix(in srgb, var(--declaration-color, #ff5f57) 8%, white); }
+.paper .preview-declaration p { margin: 0; }
 .paper .placeholder { color: #9aa1ad; }
 .paper .preview-evidence { margin: 8px 0 12px; }
 .paper .preview-evidence img { display: block; width: 100%; height: auto; border: 1px solid #e1e4e8; border-radius: 3px; }

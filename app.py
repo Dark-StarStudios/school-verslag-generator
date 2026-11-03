@@ -15,7 +15,7 @@ from flask import Flask, Response, jsonify, render_template, request, send_file
 from docx import Document
 from docx.enum.section import WD_SECTION
 from docx.enum.style import WD_STYLE_TYPE
-from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT, WD_ROW_HEIGHT_RULE
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -28,7 +28,9 @@ from reportlab.lib.units import mm
 from reportlab.platypus import (
     BaseDocTemplate,
     Frame,
+    Flowable,
     Image as ReportLabImage,
+    KeepInFrame,
     PageBreak,
     PageTemplate,
     Paragraph,
@@ -54,6 +56,14 @@ DECLARATION = (
     "mij verricht."
 )
 
+ALLOWED_DOCUMENT_FONTS = {"Arial", "Georgia", "Times New Roman", "Verdana"}
+PDF_FONT_FAMILIES = {
+    "Arial": ("Helvetica", "Helvetica-Bold"),
+    "Georgia": ("Times-Roman", "Times-Bold"),
+    "Times New Roman": ("Times-Roman", "Times-Bold"),
+    "Verdana": ("Helvetica", "Helvetica-Bold"),
+}
+
 
 def clean(value, fallback=""):
     return str(value if value is not None else fallback).strip()
@@ -75,6 +85,84 @@ def display_date(value):
     value = clean(value)
     match = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", value)
     return f"{match.group(3)}-{match.group(2)}-{match.group(1)}" if match else value
+
+
+def document_design(report):
+    raw = report.get("design", {}) if isinstance(report.get("design", {}), dict) else {}
+    heading_color = clean(raw.get("heading_color"), "#5B9BD5").upper()
+    if not re.fullmatch(r"#[0-9A-F]{6}", heading_color):
+        heading_color = "#5B9BD5"
+    heading_font = clean(raw.get("heading_font"), "Arial")
+    body_font = clean(raw.get("body_font"), "Arial")
+    cover_background_color = clean(raw.get("cover_background_color"), "#FFFFFF").upper()
+    cover_gradient_end_color = clean(raw.get("cover_gradient_end_color"), "#3858E8").upper()
+    cover_text_color = clean(raw.get("cover_text_color"), "#FFFFFF").upper()
+    declaration_color = clean(raw.get("declaration_color"), "#FF5F57").upper()
+    if not re.fullmatch(r"#[0-9A-F]{6}", cover_background_color):
+        cover_background_color = "#FFFFFF"
+    if not re.fullmatch(r"#[0-9A-F]{6}", cover_text_color):
+        cover_text_color = "#FFFFFF"
+    if not re.fullmatch(r"#[0-9A-F]{6}", cover_gradient_end_color):
+        cover_gradient_end_color = "#3858E8"
+    if not re.fullmatch(r"#[0-9A-F]{6}", declaration_color):
+        declaration_color = "#FF5F57"
+    cover_background_type = clean(raw.get("cover_background_type"), "solid")
+    if cover_background_type not in {"solid", "gradient"}:
+        cover_background_type = "solid"
+    cover_gradient_direction = clean(raw.get("cover_gradient_direction"), "diagonal")
+    if cover_gradient_direction not in {"vertical", "horizontal", "diagonal"}:
+        cover_gradient_direction = "diagonal"
+    return {
+        "heading_color": heading_color,
+        "heading_font": heading_font if heading_font in ALLOWED_DOCUMENT_FONTS else "Arial",
+        "body_font": body_font if body_font in ALLOWED_DOCUMENT_FONTS else "Arial",
+        "cover_background_color": cover_background_color,
+        "cover_background_type": cover_background_type,
+        "cover_gradient_end_color": cover_gradient_end_color,
+        "cover_gradient_direction": cover_gradient_direction,
+        "cover_text_color": cover_text_color,
+        "declaration_color": declaration_color,
+        "cover_logo": raw.get("cover_logo") if isinstance(raw.get("cover_logo"), dict) else None,
+    }
+
+
+def rgb_color(hex_color):
+    value = hex_color.lstrip("#")
+    return RGBColor(*(int(value[index:index + 2], 16) for index in (0, 2, 4)))
+
+
+def mix_hex(start, end, amount):
+    start_rgb = tuple(int(start.lstrip("#")[index:index + 2], 16) for index in (0, 2, 4))
+    end_rgb = tuple(int(end.lstrip("#")[index:index + 2], 16) for index in (0, 2, 4))
+    mixed = tuple(round(a + (b - a) * amount) for a, b in zip(start_rgb, end_rgb))
+    return "#" + "".join(f"{channel:02X}" for channel in mixed)
+
+
+class GradientPanel(Flowable):
+    """Fixed-size cover panel with native PDF gradient and overlaid content."""
+
+    def __init__(self, content, width, height, start_color, end_color, direction):
+        super().__init__()
+        self.width = width
+        self.height = height
+        self.start_color = colors.HexColor(start_color)
+        self.end_color = colors.HexColor(end_color)
+        self.direction = direction
+        self.content = KeepInFrame(width - 32 * mm, height - 26 * mm, content, mode="shrink")
+
+    def wrap(self, available_width, available_height):
+        self.content.wrapOn(self.canv, self.width - 32 * mm, self.height - 26 * mm)
+        return self.width, self.height
+
+    def draw(self):
+        if self.direction == "horizontal":
+            points = (0, 0, self.width, 0)
+        elif self.direction == "vertical":
+            points = (0, self.height, 0, 0)
+        else:
+            points = (0, self.height, self.width, 0)
+        self.canv.linearGradient(*points, (self.start_color, self.end_color), (0, 1), extend=True)
+        self.content.drawOn(self.canv, 16 * mm, 13 * mm)
 
 
 def normalize_report(raw):
@@ -162,6 +250,13 @@ def text_list(items):
 
 def selected_work_processes(report):
     return [wp for wp in report.get("work_processes", []) if wp.get("selected")]
+
+
+def selected_keuzedelen(report):
+    return [
+        item for item in report.get("keuzedelen", [])
+        if any(process.get("selected") for process in item.get("work_processes", []))
+    ]
 
 
 def evidence_images(items):
@@ -252,6 +347,23 @@ def report_sections(report):
             "evidence_images": evidence_images(wp.get("evidence_images")),
         }))
     sections.append(("Verantwoording", accountability))
+    choices = []
+    for choice in selected_keuzedelen(report):
+        processes = []
+        for wp in choice.get("work_processes", []):
+            if not wp.get("selected"):
+                continue
+            processes.append((f"{wp.get('code', '')} - {wp.get('title', '')}", {
+                "body": clean(wp.get("accountability")),
+                "evidence": text_list(wp.get("evidence")),
+                "evidence_images": evidence_images(wp.get("evidence_images")),
+            }))
+        choices.append((f"{choice.get('code', '')} - {choice.get('title', '')}", {
+            "certificate": clean(choice.get("certificate")),
+            "work_processes": processes,
+        }))
+    if choices:
+        sections.append(("Keuzedelen", choices))
     sections.append(("Evaluatie", [
         ("Vakinhoudelijke evaluatie", clean(evaluation.get("professional"))),
         ("Persoonlijke evaluatie", clean(evaluation.get("personal"))),
@@ -323,15 +435,19 @@ class ReportDocTemplate(BaseDocTemplate):
                 self.notify("TOCEntry", (level, flowable.getPlainText(), self.page))
 
 
-def pdf_styles():
+def pdf_styles(report):
+    design = document_design(report)
+    body_regular, _ = PDF_FONT_FAMILIES[design["body_font"]]
+    _, heading_bold = PDF_FONT_FAMILIES[design["heading_font"]]
+    heading_color = colors.HexColor(design["heading_color"])
     styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name="CoverTitle", parent=styles["Title"], fontName="Helvetica-Bold", fontSize=28, leading=32, textColor=colors.HexColor("#101828"), alignment=TA_LEFT, spaceAfter=14))
-    styles.add(ParagraphStyle(name="CoverMeta", parent=styles["BodyText"], fontSize=11, leading=17, textColor=colors.HexColor("#475467")))
-    styles.add(ParagraphStyle(name="H1x", parent=styles["Heading1"], fontName="Helvetica-Bold", fontSize=18, leading=22, textColor=colors.black, spaceBefore=12, spaceAfter=9, keepWithNext=True))
-    styles.add(ParagraphStyle(name="H2x", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=12.5, leading=16, textColor=colors.black, spaceBefore=10, spaceAfter=5, keepWithNext=True))
-    styles.add(ParagraphStyle(name="Bodyx", parent=styles["BodyText"], fontName="Helvetica", fontSize=10.2, leading=15, textColor=colors.HexColor("#20242C"), spaceAfter=7))
-    styles.add(ParagraphStyle(name="Smallx", parent=styles["BodyText"], fontSize=8.5, leading=12, textColor=colors.HexColor("#586174"), spaceAfter=5))
-    styles.add(ParagraphStyle(name="Bulletx", parent=styles["BodyText"], fontSize=10.2, leading=14, leftIndent=14, firstLineIndent=-7, bulletIndent=4, spaceAfter=3))
+    styles.add(ParagraphStyle(name="CoverTitle", parent=styles["Title"], fontName=heading_bold, fontSize=28, leading=32, textColor=heading_color, alignment=TA_LEFT, spaceAfter=14))
+    styles.add(ParagraphStyle(name="CoverMeta", parent=styles["BodyText"], fontName=body_regular, fontSize=11, leading=17, textColor=colors.HexColor("#475467")))
+    styles.add(ParagraphStyle(name="H1x", parent=styles["Heading1"], fontName=heading_bold, fontSize=18, leading=22, textColor=heading_color, spaceBefore=12, spaceAfter=9, keepWithNext=True))
+    styles.add(ParagraphStyle(name="H2x", parent=styles["Heading2"], fontName=heading_bold, fontSize=12.5, leading=16, textColor=heading_color, spaceBefore=10, spaceAfter=5, keepWithNext=True))
+    styles.add(ParagraphStyle(name="Bodyx", parent=styles["BodyText"], fontName=body_regular, fontSize=10.2, leading=15, textColor=colors.HexColor("#20242C"), spaceAfter=7))
+    styles.add(ParagraphStyle(name="Smallx", parent=styles["BodyText"], fontName=body_regular, fontSize=8.5, leading=12, textColor=colors.HexColor("#586174"), spaceAfter=5))
+    styles.add(ParagraphStyle(name="Bulletx", parent=styles["BodyText"], fontName=body_regular, fontSize=10.2, leading=14, leftIndent=14, firstLineIndent=-7, bulletIndent=4, spaceAfter=3))
     return styles
 
 
@@ -353,13 +469,13 @@ def add_pdf_list(story, items, styles):
 
 def build_pdf(report):
     stream = io.BytesIO()
-    styles = pdf_styles()
+    styles = pdf_styles(report)
+    design = document_design(report)
+    body_regular, _ = PDF_FONT_FAMILIES[design["body_font"]]
+    _, heading_bold = PDF_FONT_FAMILIES[design["heading_font"]]
     doc = ReportDocTemplate(stream, pagesize=A4, rightMargin=24 * mm, leftMargin=24 * mm, topMargin=22 * mm, bottomMargin=23 * mm, title=clean(report.get("project", {}).get("title"), "Examenverslag"))
     student = report.get("student", {})
     project = report.get("project", {})
-    story = [Spacer(1, 32 * mm), p(project.get("title", "Examenverslag"), styles["CoverTitle"])]
-    subtitle = project.get("subtitle") or project.get("exam_name") or "Examenverslag"
-    story += [p(subtitle, styles["H2x"]), Spacer(1, 10 * mm)]
     meta = [
         ["Naam", student.get("name", "")], ["OV-nummer", student.get("student_number", "")],
         ["Klas", student.get("class_name", "")], ["Versie", project.get("version", "1.0")],
@@ -370,15 +486,61 @@ def build_pdf(report):
         ["Stagebedrijf", student.get("company", "")], ["Praktijkopleider", student.get("practice_supervisor", "")],
         ["BPV-begeleider", student.get("bpv_supervisor", "")],
     ]
-    table = Table([[p(a, styles["Smallx"]), p(b, styles["Bodyx"])] for a, b in meta if clean(b)], colWidths=[42 * mm, 105 * mm])
-    table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LINEBELOW", (0, 0), (-1, -1), 0.35, colors.HexColor("#E2E6ED")), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]))
-    story += [table, PageBreak()]
+    logo = evidence_images([design.get("cover_logo")])
+    custom_cover = bool(logo or design["cover_background_color"] != "#FFFFFF" or design["cover_background_type"] == "gradient")
+    if custom_cover:
+        story = [Spacer(1, 10 * mm)]
+        if logo:
+            picture = ReportLabImage(io.BytesIO(logo[0]["bytes"]))
+            picture._restrictSize(95 * mm, 34 * mm)
+            story += [picture, Spacer(1, 10 * mm)]
+        cover_title = ParagraphStyle(name="CoverTitleCustom", parent=styles["CoverTitle"], textColor=colors.HexColor(design["cover_text_color"]), fontSize=30, leading=34)
+        cover_version = ParagraphStyle(name="CoverVersionCustom", parent=styles["CoverMeta"], textColor=colors.HexColor(design["cover_text_color"]), fontSize=18, leading=23)
+        cover_meta = ParagraphStyle(name="CoverMetaCustom", parent=styles["CoverMeta"], textColor=colors.HexColor(design["cover_text_color"]), fontSize=13, leading=19)
+        panel_content = [
+            p(project.get("title", "Examenverslag"), cover_title),
+            p("Versie " + clean(project.get("version"), "1.0"), cover_version),
+            Spacer(1, 13 * mm),
+            p(student.get("name", ""), cover_meta),
+            p(display_date(project.get("report_date", "")), cover_meta),
+            Spacer(1, 28 * mm),
+            p("Stagebedrijf: " + clean(student.get("company"), "-"), cover_meta),
+            p("Stagebegeleider: " + clean(student.get("practice_supervisor"), "-"), cover_meta),
+            p("BPV: " + clean(student.get("bpv_supervisor"), "-"), cover_meta),
+        ]
+        if design["cover_background_type"] == "gradient":
+            panel = GradientPanel(
+                panel_content,
+                162 * mm,
+                150 * mm,
+                design["cover_background_color"],
+                design["cover_gradient_end_color"],
+                design["cover_gradient_direction"],
+            )
+        else:
+            panel = Table([[panel_content]], colWidths=[162 * mm], rowHeights=[150 * mm])
+            panel.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(design["cover_background_color"])),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 16 * mm),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 16 * mm),
+                ("TOPPADDING", (0, 0), (-1, -1), 14 * mm),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 12 * mm),
+            ]))
+        story += [panel, PageBreak()]
+    else:
+        story = [Spacer(1, 32 * mm), p(project.get("title", "Examenverslag"), styles["CoverTitle"])]
+        subtitle = project.get("subtitle") or project.get("exam_name") or "Examenverslag"
+        story += [p(subtitle, styles["H2x"]), Spacer(1, 10 * mm)]
+        table = Table([[p(a, styles["Smallx"]), p(b, styles["Bodyx"])] for a, b in meta if clean(b)], colWidths=[42 * mm, 105 * mm])
+        table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LINEBELOW", (0, 0), (-1, -1), 0.35, colors.HexColor("#E2E6ED")), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]))
+        story += [table, PageBreak()]
 
     story.append(p("Inhoudsopgave", styles["H1x"]))
     toc = TableOfContents()
     toc.levelStyles = [
-        ParagraphStyle(name="TOC1", fontName="Helvetica-Bold", fontSize=10.5, leading=16, leftIndent=0, firstLineIndent=0, textColor=colors.black),
-        ParagraphStyle(name="TOC2", fontName="Helvetica", fontSize=9.5, leading=14, leftIndent=10 * mm, firstLineIndent=0, textColor=colors.HexColor("#475467")),
+        ParagraphStyle(name="TOC1", fontName=heading_bold, fontSize=10.5, leading=16, leftIndent=0, firstLineIndent=0, textColor=colors.HexColor(design["heading_color"])),
+        ParagraphStyle(name="TOC2", fontName=body_regular, fontSize=9.5, leading=14, leftIndent=10 * mm, firstLineIndent=0, textColor=colors.HexColor("#475467")),
     ]
     story += [toc, PageBreak()]
     for title, content in report_sections(report):
@@ -397,6 +559,22 @@ def build_pdf(report):
                     picture = ReportLabImage(io.BytesIO(image["bytes"]))
                     picture._restrictSize(155 * mm, 95 * mm)
                     story += [picture, Spacer(1, 3 * mm)]
+        elif title == "Keuzedelen":
+            for choice_title, choice in content:
+                add_pdf_heading(story, choice_title, styles["H2x"], 1)
+                if choice.get("certificate"):
+                    story.append(p("Code: " + choice["certificate"], styles["Smallx"]))
+                for process_title, data in choice.get("work_processes", []):
+                    add_pdf_heading(story, process_title, styles["H2x"], 1)
+                    story.append(p(data.get("body"), styles["Bodyx"]))
+                    if data.get("evidence"):
+                        story.append(p("Bewijs", styles["H2x"]))
+                        add_pdf_list(story, data["evidence"], styles)
+                    for image in data.get("evidence_images", []):
+                        story.append(p(image["name"], styles["Smallx"]))
+                        picture = ReportLabImage(io.BytesIO(image["bytes"]))
+                        picture._restrictSize(155 * mm, 95 * mm)
+                        story += [picture, Spacer(1, 3 * mm)]
         elif title in {"Projectgegevens", "Examenactiviteiten", "Grenzen en randvoorwaarden", "Planning", "Evaluatie"}:
             for sub, body in content:
                 if not clean(sub):
@@ -406,6 +584,19 @@ def build_pdf(report):
                     add_pdf_list(story, body, styles)
                 else:
                     story.append(p(body, styles["Bodyx"]))
+        elif title == "Verklaring":
+            declaration_background = mix_hex(design["declaration_color"], "#FFFFFF", 0.92)
+            declaration_table = Table([[p(content[0], styles["Bodyx"])]], colWidths=[158 * mm])
+            declaration_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(declaration_background)),
+                ("BOX", (0, 0), (-1, -1), 0.35, colors.HexColor("#E2E6ED")),
+                ("LINEBEFORE", (0, 0), (0, -1), 3, colors.HexColor(design["declaration_color"])),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8 * mm),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8 * mm),
+                ("TOPPADDING", (0, 0), (-1, -1), 6 * mm),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6 * mm),
+            ]))
+            story.append(declaration_table)
         else:
             for body in content:
                 story.append(p(body, styles["Bodyx"]))
@@ -420,6 +611,22 @@ def set_cell_shading(cell, fill):
     shd = OxmlElement("w:shd")
     shd.set(qn("w:fill"), fill)
     tc_pr.append(shd)
+
+
+def set_cell_border(cell, **edges):
+    tc_pr = cell._tc.get_or_add_tcPr()
+    borders = tc_pr.first_child_found_in("w:tcBorders")
+    if borders is None:
+        borders = OxmlElement("w:tcBorders")
+        tc_pr.append(borders)
+    for edge, options in edges.items():
+        tag = f"w:{edge}"
+        element = borders.find(qn(tag))
+        if element is None:
+            element = OxmlElement(tag)
+            borders.append(element)
+        for key, value in options.items():
+            element.set(qn(f"w:{key}"), str(value))
 
 
 def add_docx_toc(doc):
@@ -448,17 +655,18 @@ def add_docx_field(run, instruction):
     run._r.extend([begin, instr, separate, end])
 
 
-def configure_docx(doc):
+def configure_docx(doc, report):
+    design = document_design(report)
     section = doc.sections[0]
     section.top_margin = Cm(2.2); section.bottom_margin = Cm(2.0)
     section.left_margin = Cm(2.5); section.right_margin = Cm(2.5)
     styles = doc.styles
     normal = styles["Normal"]
-    normal.font.name = "Aptos"; normal.font.size = Pt(10.5); normal.font.color.rgb = RGBColor(32, 36, 44)
+    normal.font.name = design["body_font"]; normal.font.size = Pt(10.5); normal.font.color.rgb = RGBColor(32, 36, 44)
     normal.paragraph_format.space_after = Pt(7); normal.paragraph_format.line_spacing = 1.15
     for name, size, before, after in (("Title", 28, 0, 14), ("Heading 1", 18, 14, 8), ("Heading 2", 13, 10, 5)):
         style = styles[name]
-        style.font.name = "Aptos Display"; style.font.size = Pt(size); style.font.bold = True; style.font.color.rgb = RGBColor(0, 0, 0)
+        style.font.name = design["heading_font"]; style.font.size = Pt(size); style.font.bold = True; style.font.color.rgb = rgb_color(design["heading_color"])
         style.paragraph_format.space_before = Pt(before); style.paragraph_format.space_after = Pt(after); style.paragraph_format.keep_with_next = True
     footer = section.footer.paragraphs[0]
     footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
@@ -473,11 +681,9 @@ def add_docx_bullets(doc, items):
 
 def build_docx(report):
     doc = Document()
-    configure_docx(doc)
+    configure_docx(doc, report)
     student = report.get("student", {}); project = report.get("project", {})
-    doc.add_paragraph(project.get("title", "Examenverslag"), style="Title")
-    doc.add_paragraph(project.get("subtitle") or project.get("exam_name") or "Examenverslag", style="Subtitle")
-    doc.add_paragraph()
+    design = document_design(report)
     rows = [
         ("Naam", student.get("name")), ("OV-nummer", student.get("student_number")),
         ("Klas", student.get("class_name")), ("Versie", project.get("version", "1.0")),
@@ -488,16 +694,73 @@ def build_docx(report):
         ("Stagebedrijf", student.get("company")), ("Praktijkopleider", student.get("practice_supervisor")),
         ("BPV-begeleider", student.get("bpv_supervisor")),
     ]
-    table = doc.add_table(rows=0, cols=2)
-    table.autofit = False
-    for i, (label, value) in enumerate((x for x in rows if clean(x[1]))):
-        cells = table.add_row().cells
-        cells[0].width = Cm(4.2); cells[1].width = Cm(11.8)
-        cells[0].text = label; cells[1].text = clean(value)
-        cells[0].vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-        cells[1].vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-        if i % 2:
-            set_cell_shading(cells[0], "F5F7FA"); set_cell_shading(cells[1], "F5F7FA")
+    logo = evidence_images([design.get("cover_logo")])
+    custom_cover = bool(logo or design["cover_background_color"] != "#FFFFFF" or design["cover_background_type"] == "gradient")
+    if custom_cover:
+        doc.add_paragraph()
+        if logo:
+            doc.add_picture(io.BytesIO(logo[0]["bytes"]), width=Cm(10.5))
+            doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph()
+        content = (
+            (project.get("title", "Examenverslag"), 32, True, 0),
+            ("Versie " + clean(project.get("version"), "1.0"), 20, False, 4),
+            (student.get("name", ""), 17, False, 22),
+            (display_date(project.get("report_date", "")), 17, False, 0),
+            ("Stagebedrijf: " + clean(student.get("company"), "-"), 14, False, 80),
+            ("Stagebegeleider: " + clean(student.get("practice_supervisor"), "-"), 14, False, 0),
+            ("BPV: " + clean(student.get("bpv_supervisor"), "-"), 14, False, 0),
+        )
+        if design["cover_background_type"] == "gradient":
+            table = doc.add_table(rows=len(content), cols=1)
+            table.autofit = False
+            row_heights = (34, 21, 24, 15, 45, 13, 13)
+            for index, ((text, size, bold, _), row) in enumerate(zip(content, table.rows)):
+                row.height = Cm(row_heights[index] / 10)
+                row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
+                cell = row.cells[0]
+                cell.width = Cm(16)
+                cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+                gradient_amount = index / max(1, len(content) - 1)
+                set_cell_shading(cell, mix_hex(design["cover_background_color"], design["cover_gradient_end_color"], gradient_amount).lstrip("#"))
+                set_cell_border(cell, top={"val": "nil"}, bottom={"val": "nil"}, left={"val": "nil"}, right={"val": "nil"})
+                paragraph = cell.paragraphs[0]
+                paragraph.paragraph_format.space_after = Pt(0)
+                run = paragraph.add_run(clean(text))
+                run.bold = bold
+                run.font.name = design["heading_font"] if index < 2 else design["body_font"]
+                run.font.size = Pt(size)
+                run.font.color.rgb = rgb_color(design["cover_text_color"])
+        else:
+            table = doc.add_table(rows=1, cols=1)
+            table.autofit = False
+            cell = table.cell(0, 0)
+            cell.width = Cm(16)
+            cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.TOP
+            set_cell_shading(cell, design["cover_background_color"].lstrip("#"))
+            for index, (text, size, bold, before) in enumerate(content):
+                paragraph = cell.paragraphs[0] if index == 0 else cell.add_paragraph()
+                paragraph.paragraph_format.space_before = Pt(before)
+                paragraph.paragraph_format.space_after = Pt(2)
+                run = paragraph.add_run(clean(text))
+                run.bold = bold
+                run.font.name = design["heading_font"] if index < 2 else design["body_font"]
+                run.font.size = Pt(size)
+                run.font.color.rgb = rgb_color(design["cover_text_color"])
+    else:
+        doc.add_paragraph(project.get("title", "Examenverslag"), style="Title")
+        doc.add_paragraph(project.get("subtitle") or project.get("exam_name") or "Examenverslag", style="Subtitle")
+        doc.add_paragraph()
+        table = doc.add_table(rows=0, cols=2)
+        table.autofit = False
+        for i, (label, value) in enumerate((x for x in rows if clean(x[1]))):
+            cells = table.add_row().cells
+            cells[0].width = Cm(4.2); cells[1].width = Cm(11.8)
+            cells[0].text = label; cells[1].text = clean(value)
+            cells[0].vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+            cells[1].vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+            if i % 2:
+                set_cell_shading(cells[0], "F5F7FA"); set_cell_shading(cells[1], "F5F7FA")
     doc.add_page_break()
     doc.add_heading("Inhoudsopgave", level=1)
     add_docx_toc(doc)
@@ -518,6 +781,20 @@ def build_docx(report):
                 for image in data.get("evidence_images", []):
                     doc.add_paragraph(image["name"], style="Caption")
                     doc.add_picture(io.BytesIO(image["bytes"]), width=Cm(15.5))
+        elif title == "Keuzedelen":
+            for choice_title, choice in content:
+                doc.add_heading(choice_title, level=2)
+                if choice.get("certificate"):
+                    para = doc.add_paragraph(); para.add_run("Code: ").bold = True; para.add_run(choice["certificate"])
+                for process_title, data in choice.get("work_processes", []):
+                    doc.add_heading(process_title, level=2)
+                    doc.add_paragraph(data.get("body") or "")
+                    if data.get("evidence"):
+                        para = doc.add_paragraph(); para.add_run("Bewijs").bold = True
+                        add_docx_bullets(doc, data["evidence"])
+                    for image in data.get("evidence_images", []):
+                        doc.add_paragraph(image["name"], style="Caption")
+                        doc.add_picture(io.BytesIO(image["bytes"]), width=Cm(15.5))
         elif title in {"Projectgegevens", "Examenactiviteiten", "Grenzen en randvoorwaarden", "Planning", "Evaluatie"}:
             for sub, body in content:
                 if not clean(sub):
@@ -527,6 +804,18 @@ def build_docx(report):
                     add_docx_bullets(doc, body)
                 else:
                     doc.add_paragraph(clean(body))
+        elif title == "Verklaring":
+            declaration_table = doc.add_table(rows=1, cols=1)
+            cell = declaration_table.cell(0, 0)
+            set_cell_shading(cell, mix_hex(design["declaration_color"], "#FFFFFF", 0.92).lstrip("#"))
+            set_cell_border(
+                cell,
+                left={"val": "single", "sz": "28", "color": design["declaration_color"].lstrip("#")},
+                top={"val": "single", "sz": "4", "color": "E2E6ED"},
+                right={"val": "single", "sz": "4", "color": "E2E6ED"},
+                bottom={"val": "single", "sz": "4", "color": "E2E6ED"},
+            )
+            cell.paragraphs[0].add_run(clean(content[0]))
         else:
             for body in content:
                 doc.add_paragraph(clean(body))
@@ -549,8 +838,9 @@ def odt_list(items):
 
 def build_odt(report):
     student = report.get("student", {}); project = report.get("project", {})
+    design = document_design(report)
     embedded_images = []
-    body = [odt_paragraph(project.get("title", "Examenverslag"), "Title"), odt_paragraph(project.get("subtitle") or project.get("exam_name") or "Examenverslag", "Subtitle")]
+    body = []
     cover_fields = (
         ("Naam", student.get("name")), ("OV-nummer", student.get("student_number")),
         ("Klas", student.get("class_name")), ("Versie", project.get("version", "1.0")),
@@ -561,9 +851,28 @@ def build_odt(report):
         ("Stagebedrijf", student.get("company")), ("Praktijkopleider", student.get("practice_supervisor")),
         ("BPV-begeleider", student.get("bpv_supervisor")),
     )
-    for label, value in cover_fields:
-        if clean(value):
-            body.append(odt_paragraph(f"{label}: {clean(value)}"))
+    logo = evidence_images([design.get("cover_logo")])
+    custom_cover = bool(logo or design["cover_background_color"] != "#FFFFFF" or design["cover_background_type"] == "gradient")
+    if custom_cover:
+        if logo:
+            archive_name = f"Pictures/cover-{logo[0]['name']}"
+            embedded_images.append((archive_name, logo[0]["mime"], logo[0]["bytes"]))
+            body.append(f'<text:p><draw:frame draw:name="Voorbladlogo" text:anchor-type="paragraph" svg:width="10.5cm" svg:height="3.4cm"><draw:image xlink:href="{escape(archive_name)}" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/></draw:frame></text:p>')
+        panel = [
+            odt_paragraph(project.get("title", "Examenverslag"), "CoverTitleWhite"),
+            odt_paragraph("Versie " + clean(project.get("version"), "1.0"), "CoverVersionWhite"),
+            odt_paragraph(student.get("name", ""), "CoverTextWhite"),
+            odt_paragraph(display_date(project.get("report_date", "")), "CoverTextWhite"),
+            odt_paragraph("Stagebedrijf: " + clean(student.get("company"), "-"), "CoverTextWhite"),
+            odt_paragraph("Stagebegeleider: " + clean(student.get("practice_supervisor"), "-"), "CoverTextWhite"),
+            odt_paragraph("BPV: " + clean(student.get("bpv_supervisor"), "-"), "CoverTextWhite"),
+        ]
+        body.append('<table:table table:name="Voorblad"><table:table-column table:number-columns-repeated="1"/><table:table-row><table:table-cell table:style-name="CoverCell" office:value-type="string">' + "".join(panel) + '</table:table-cell></table:table-row></table:table>')
+    else:
+        body.extend([odt_paragraph(project.get("title", "Examenverslag"), "Title"), odt_paragraph(project.get("subtitle") or project.get("exam_name") or "Examenverslag", "Subtitle")])
+        for label, value in cover_fields:
+            if clean(value):
+                body.append(odt_paragraph(f"{label}: {clean(value)}"))
     body.append('<text:p text:style-name="PageBreak"/>')
     body.append(odt_paragraph("Inhoudsopgave", "Heading_20_1"))
     body.append('<text:table-of-content text:name="Inhoudsopgave1" text:protected="false"><text:table-of-content-source text:outline-level="2"/><text:index-body><text:p>Werk de inhoudsopgave bij in LibreOffice.</text:p></text:index-body></text:table-of-content>')
@@ -583,15 +892,35 @@ def build_odt(report):
                     embedded_images.append((archive_name, image["mime"], image["bytes"]))
                     body.append(odt_paragraph(image["name"]))
                     body.append(f'<draw:frame draw:name="Afbeelding{len(embedded_images)}" text:anchor-type="paragraph" svg:width="15.5cm" svg:height="9.5cm"><draw:image xlink:href="{escape(archive_name)}" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/></draw:frame>')
+        elif title == "Keuzedelen":
+            for choice_title, choice in content:
+                body.append(odt_paragraph(choice_title, "Heading_20_2"))
+                if choice.get("certificate"):
+                    body.append(odt_paragraph("Code: " + choice["certificate"]))
+                for process_title, data in choice.get("work_processes", []):
+                    body.append(odt_paragraph(process_title, "Heading_20_2"))
+                    body.append(odt_paragraph(data.get("body")))
+                    if data.get("evidence"):
+                        body.append(odt_paragraph("Bewijs", "Heading_20_2")); body.append(odt_list(data["evidence"]))
+                    for image in data.get("evidence_images", []):
+                        archive_name = f"Pictures/{len(embedded_images) + 1}-{image['name']}"
+                        embedded_images.append((archive_name, image["mime"], image["bytes"]))
+                        body.append(odt_paragraph(image["name"]))
+                        body.append(f'<draw:frame draw:name="Afbeelding{len(embedded_images)}" text:anchor-type="paragraph" svg:width="15.5cm" svg:height="9.5cm"><draw:image xlink:href="{escape(archive_name)}" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/></draw:frame>')
         elif title in {"Projectgegevens", "Examenactiviteiten", "Grenzen en randvoorwaarden", "Planning", "Evaluatie"}:
             for sub, value in content:
                 if clean(sub): body.append(odt_paragraph(sub, "Heading_20_2"))
                 body.append(odt_list(value) if isinstance(value, list) else odt_paragraph(value))
+        elif title == "Verklaring":
+            body.append('<table:table table:name="Verklaring"><table:table-column table:number-columns-repeated="1"/><table:table-row><table:table-cell table:style-name="DeclarationCell" office:value-type="string">' + odt_paragraph(content[0]) + '</table:table-cell></table:table-row></table:table>')
         else:
             body.extend(odt_paragraph(x) for x in content)
+    odt_gradient_angle = {"vertical": "0", "horizontal": "900", "diagonal": "1350"}[design["cover_gradient_direction"]]
+    cover_fill = ('draw:fill="gradient" draw:fill-gradient-name="CoverGradient"' if design["cover_background_type"] == "gradient" else f'fo:background-color="{design["cover_background_color"]}"')
+    declaration_background = mix_hex(design["declaration_color"], "#FFFFFF", 0.92)
     content_xml = f'''<?xml version="1.0" encoding="UTF-8"?>
-<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" office:version="1.3"><office:automatic-styles><style:style style:name="PageBreak" style:family="paragraph"><style:paragraph-properties fo:break-before="page"/></style:style><text:list-style style:name="L1"><text:list-level-style-bullet text:level="1" text:bullet-char="•"><style:list-level-properties text:space-before="0.65cm" text:min-label-width="0.45cm"/></text:list-level-style-bullet></text:list-style></office:automatic-styles><office:body><office:text>{''.join(body)}</office:text></office:body></office:document-content>'''
-    styles_xml = '''<?xml version="1.0" encoding="UTF-8"?><office:document-styles xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" office:version="1.3"><office:styles><style:default-style style:family="paragraph"><style:text-properties style:font-name="Arial" fo:font-size="10.5pt"/><style:paragraph-properties fo:line-height="115%" fo:margin-bottom="0.18cm"/></style:default-style><style:style style:name="Title" style:family="paragraph"><style:text-properties fo:font-size="28pt" fo:font-weight="bold"/><style:paragraph-properties fo:margin-top="3cm" fo:margin-bottom="0.45cm"/></style:style><style:style style:name="Subtitle" style:family="paragraph"><style:text-properties fo:font-size="15pt"/><style:paragraph-properties fo:margin-bottom="1cm"/></style:style><style:style style:name="Heading_20_1" style:display-name="Heading 1" style:family="paragraph" style:default-outline-level="1"><style:text-properties fo:font-size="18pt" fo:font-weight="bold"/><style:paragraph-properties fo:margin-top="0.5cm" fo:margin-bottom="0.25cm"/></style:style><style:style style:name="Heading_20_2" style:display-name="Heading 2" style:family="paragraph" style:default-outline-level="2"><style:text-properties fo:font-size="13pt" fo:font-weight="bold"/><style:paragraph-properties fo:margin-top="0.35cm" fo:margin-bottom="0.15cm"/></style:style></office:styles></office:document-styles>'''
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" office:version="1.3"><office:automatic-styles><draw:gradient draw:name="CoverGradient" draw:style="linear" draw:start-color="{design['cover_background_color']}" draw:end-color="{design['cover_gradient_end_color']}" draw:angle="{odt_gradient_angle}"/><style:style style:name="PageBreak" style:family="paragraph"><style:paragraph-properties fo:break-before="page"/></style:style><style:style style:name="CoverCell" style:family="table-cell"><style:table-cell-properties {cover_fill} fo:padding="1.2cm"/></style:style><style:style style:name="DeclarationCell" style:family="table-cell"><style:table-cell-properties fo:background-color="{declaration_background}" fo:border="0.5pt solid #E2E6ED" fo:border-left="3pt solid {design['declaration_color']}" fo:padding="0.55cm"/></style:style><text:list-style style:name="L1"><text:list-level-style-bullet text:level="1" text:bullet-char="•"><style:list-level-properties text:space-before="0.65cm" text:min-label-width="0.45cm"/></text:list-level-style-bullet></text:list-style></office:automatic-styles><office:body><office:text>{''.join(body)}</office:text></office:body></office:document-content>'''
+    styles_xml = f'''<?xml version="1.0" encoding="UTF-8"?><office:document-styles xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" office:version="1.3"><office:styles><style:default-style style:family="paragraph"><style:text-properties style:font-name="{escape(design['body_font'])}" fo:font-family="{escape(design['body_font'])}" fo:font-size="10.5pt"/><style:paragraph-properties fo:line-height="115%" fo:margin-bottom="0.18cm"/></style:default-style><style:style style:name="Title" style:family="paragraph"><style:text-properties style:font-name="{escape(design['heading_font'])}" fo:font-family="{escape(design['heading_font'])}" fo:color="{design['heading_color']}" fo:font-size="28pt" fo:font-weight="bold"/><style:paragraph-properties fo:margin-top="3cm" fo:margin-bottom="0.45cm"/></style:style><style:style style:name="Subtitle" style:family="paragraph"><style:text-properties fo:font-size="15pt"/><style:paragraph-properties fo:margin-bottom="1cm"/></style:style><style:style style:name="CoverTitleWhite" style:family="paragraph"><style:text-properties style:font-name="{escape(design['heading_font'])}" fo:font-family="{escape(design['heading_font'])}" fo:color="{design['cover_text_color']}" fo:font-size="30pt" fo:font-weight="bold"/><style:paragraph-properties fo:margin-bottom="0.25cm"/></style:style><style:style style:name="CoverVersionWhite" style:family="paragraph"><style:text-properties fo:color="{design['cover_text_color']}" fo:font-size="18pt"/><style:paragraph-properties fo:margin-bottom="1.2cm"/></style:style><style:style style:name="CoverTextWhite" style:family="paragraph"><style:text-properties fo:color="{design['cover_text_color']}" fo:font-size="13pt"/><style:paragraph-properties fo:margin-bottom="0.15cm"/></style:style><style:style style:name="Heading_20_1" style:display-name="Heading 1" style:family="paragraph" style:default-outline-level="1"><style:text-properties style:font-name="{escape(design['heading_font'])}" fo:font-family="{escape(design['heading_font'])}" fo:color="{design['heading_color']}" fo:font-size="18pt" fo:font-weight="bold"/><style:paragraph-properties fo:margin-top="0.5cm" fo:margin-bottom="0.25cm"/></style:style><style:style style:name="Heading_20_2" style:display-name="Heading 2" style:family="paragraph" style:default-outline-level="2"><style:text-properties style:font-name="{escape(design['heading_font'])}" fo:font-family="{escape(design['heading_font'])}" fo:color="{design['heading_color']}" fo:font-size="13pt" fo:font-weight="bold"/><style:paragraph-properties fo:margin-top="0.35cm" fo:margin-bottom="0.15cm"/></style:style></office:styles></office:document-styles>'''
     image_manifest = "".join(f'<manifest:file-entry manifest:full-path="{escape(path)}" manifest:media-type="{mime}"/>' for path, mime, _ in embedded_images)
     manifest = f'''<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/><manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>{image_manifest}</manifest:manifest>'''
     output = io.BytesIO()
